@@ -1,1 +1,1 @@
-Treduzione in italiano di Elder Scrolls Online 
+Traduzione in italiano di Elder Scrolls Online 
