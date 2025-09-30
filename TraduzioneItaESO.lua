@@ -729,7 +729,7 @@ function addon:HookPOIPins()
 	HookPinSize(ZO_MapPin.PIN_DATA[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE_CURRENT_LOC])
 end
 
-function addon:Initialize()
+function addon:InitializeMap()
 	self:InitSettings()
 	local gps = LibGPS3
 
@@ -826,12 +826,12 @@ AddColor("Alliance", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_ALLIANCE))
 AddColor("BaseGame", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_BASE_DLC))
 AddColor("None", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_NO_COLOR))
 
-local function OnAddOnLoaded(event, addonName)
+local function OnMapAddOnLoaded(event, addonName)
 	em:UnregisterForEvent(addon.name, EVENT_PLAYER_ACTIVATED)
-	addon:Initialize()
+	addon:InitializeMap()
 end
 
-em:RegisterForEvent(addon.name, EVENT_PLAYER_ACTIVATED, OnAddOnLoaded)
+em:RegisterForEvent(addon.name, EVENT_PLAYER_ACTIVATED, OnMapAddOnLoaded)
 
 local function ColorizeEnglish(text)
     return ZO_ColorDef:New(addon.account.bilingualColor or "FFFFFF"):Colorize(text)
@@ -1056,18 +1056,42 @@ local function HookKeepTooltips()
         end
     end
 end
-local function InitializeAddon()
-    d("[TraduzioneItaESO] Inizializzazione addon")
+
+local em = GetEventManager()
+
+local function OnAddonLoaded(_, addonName)
+    if addonName ~= addon.name then return end
+    -- togliamo solo l’evento ADD_ON_LOADED, non PLAYER_ACTIVATED
+    em:UnregisterForEvent(addon.name, EVENT_ADD_ON_LOADED)
+    -- 2.1) SavedVars con il flag bilingualPOI a true di default
+    local defaults = {
+        bilingualMapNames = true,
+        useEnglishNames   = false,
+        bilingualNewLine  = true,
+        showNotifications = true,
+        bilingualPOI      = true,
+    }
+    addon.account = ZO_SavedVars:NewAccountWide("TraduzioneItaESO_Vars", 1, nil, defaults)
+
+    -- 2.2) Carichiamo la tabella delle traduzioni
     LoadTranslationTable()
+
+    -- 2.3) Punto 4: agganciamo gli hook dei tooltip
+    if addon.account.bilingualPOI then
+        HookPoiTooltips()
+        HookShrineTooltips()
+        HookKeepTooltips()
+    end
+
     d("[TraduzioneItaESO] Lingua corrente: " .. GetCVar("language.2"))
     RefreshUI()
-    EVENT_MANAGER:RegisterForEvent(addonName, EVENT_RETICLE_HIDDEN_UPDATE, function(eventCode, hidden)
+    EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_RETICLE_HIDDEN_UPDATE, function(eventCode, hidden)
         UpdateUIVisibility(hidden)
     end)
-    if TraduzioneItaESO.account.bilingualMapNames or TraduzioneItaESO.account.useEnglishNames then
+    if addon.account.bilingualMapNames or addon.account.useEnglishNames then
         d("[TraduzioneItaESO] Registrazione eventi mappa")
-        EVENT_MANAGER:RegisterForEvent(addonName, EVENT_ZONE_UPDATE, UpdateMapName)
-        EVENT_MANAGER:RegisterForEvent(addonName, EVENT_MAP_CHUNK_INFO_RECEIVED, UpdateMapName)
+        EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_ZONE_UPDATE, UpdateMapName)
+        EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_MAP_CHUNK_INFO_RECEIVED, UpdateMapName)
         ZO_PreHook(ZO_WorldMap, "OnShow", function()
             d("[TraduzioneItaESO] ZO_WorldMap OnShow")
             UpdateMapName()
@@ -1076,7 +1100,7 @@ local function InitializeAddon()
             addon:Hide()
         end)
         addon.lastZoom = g_mapPanAndZoom:GetCurrentCurvedZoom()
-        EVENT_MANAGER:RegisterForUpdate(addonName .. "_MapUpdate", 50, function()
+        EVENT_MANAGER:RegisterForUpdate(addon.name .. "_MapUpdate", 50, function()
             if ZO_WorldMap:IsHidden() then return end
             if GetCurrentMapIndex() ~= TAMRIEL_MAP_INDEX then return end
             local currentZoom = g_mapPanAndZoom:GetCurrentCurvedZoom()
@@ -1086,11 +1110,10 @@ local function InitializeAddon()
             end
         end)
     end
-    if TraduzioneItaESO.account.bilingualPOI then
-        HookPoiTooltips()
-        HookShrineTooltips()
-        HookKeepTooltips()
-    end
+    -- 2.4) Registriamo l’evento per aggiornare i nomi in mappa
+    em:RegisterForEvent(addon.name, EVENT_PLAYER_ACTIVATED, UpdateMapName)
+    -- E lanciamo subito un UpdateMapName per far vedere subito i nomi corretti
+    UpdateMapName()
     local LAM = LibAddonMenu2
     local panelData = {
         type = "panel",
@@ -1251,32 +1274,12 @@ local function InitializeAddon()
             width = "half"
         }
     }
-    LAM:RegisterAddonPanel(addonName .. "Options", panelData)
-    LAM:RegisterOptionControls(addonName .. "Options", optionsData)
+    LAM:RegisterAddonPanel(addon.name .. "Options", panelData)
+    LAM:RegisterOptionControls(addon.name .. "Options", optionsData)
 end
 
-local function OnAddonLoaded(_, addonName)
-  if addonName ~= addon.name then return end
-  EVENT_MANAGER:UnregisterForEvent(addon.name, EVENT_ADD_ON_LOADED)
-
-  -- SavedVars
-  local defaults = {
-    bilingualMapNames = true,
-    useEnglishNames   = false,
-    bilingualNewLine  = true,
-    showNotifications = true,
-    bilingualPOI = true,
-  }
-  addon.account = ZO_SavedVars:NewAccountWide("TraduzioneItaESO_Vars", 1, nil, defaults)
-
-  -- Carica le traduzioni da zone_it.lua / npc_it.lua
-  LoadTranslationTable()
-
-  -- Registra l’aggiornamento mappa
-  EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_PLAYER_ACTIVATED, UpdateMapName)
-end
-
-EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_ADD_ON_LOADED, OnAddonLoaded)
+-- qui registriamo ADD_ON_LOADED, non PLAYER_ACTIVATED
+em:RegisterForEvent(addon.name, EVENT_ADD_ON_LOADED, OnAddonLoaded)
 
 -- Slash commands
 SLASH_COMMANDS["/itaesoit"] = function()
@@ -1290,7 +1293,7 @@ SLASH_COMMANDS["/itaesoen"] = function()
     SetLanguage("en")
 end
 SLASH_COMMANDS["/itaeso"] = function()
-    LibAddonMenu2:OpenToPanel(addonName .. "Options")
+    LibAddonMenu2:OpenToPanel(addon.name .. "Options")
     d("[TraduzioneItaESO] Apertura pannello impostazioni")
 end
 SLASH_COMMANDS["/testitaeso"] = function()
