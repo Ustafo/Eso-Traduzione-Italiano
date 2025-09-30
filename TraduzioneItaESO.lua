@@ -826,42 +826,28 @@ AddColor("Alliance", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_ALLIANCE))
 AddColor("BaseGame", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_BASE_DLC))
 AddColor("None", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_NO_COLOR))
 
-local function OnMapAddOnLoaded(event, addonName)
-	em:UnregisterForEvent(addon.name, EVENT_PLAYER_ACTIVATED)
-	addon:InitializeMap()
-end
-
-em:RegisterForEvent(addon.name, EVENT_PLAYER_ACTIVATED, OnMapAddOnLoaded)
+local em = GetEventManager()
+em:RegisterForEvent(addon.name, EVENT_ADD_ON_LOADED, function(_, addonName)
+    if addonName ~= addon.name then return end
+    em:UnregisterForEvent(addon.name, EVENT_ADD_ON_LOADED)
+    addon:Initialize()
+end)
 
 local function ColorizeEnglish(text)
     return ZO_ColorDef:New(addon.account.bilingualColor or "FFFFFF"):Colorize(text)
 end
 
 local function LoadTranslationTable()
-    -- inizializza direttamente il campo dentro la tabella globale
     addon.translationTable = {}
     addon.reverseTable     = {}
     local count = 0
-
     for itName, enName in pairs(addon.ZoneTranslations or {}) do
-        if itName ~= "" and enName ~= "" then
-            addon.translationTable[itName]    = enName
-            addon.reverseTable[enName]        = itName
-            count = count + 1
-            d("[TraduzioneItaESO] Traduzione zona: " .. itName .. " -> " .. enName)
-        end
+        addon.translationTable[itName] = enName
+        addon.reverseTable[enName]     = itName
+        count = count + 1
+        d("[TraduzioneItaESO] Traduzione zona: " .. itName .. " -> " .. enName)
     end
     d("[TraduzioneItaESO] Caricate " .. count .. " traduzioni")
-
-    -- test rapidi
-    local testKeys = { "Santuario di Vivec", "Abbazia delle Lame", "Abbazia di Zenithar" }
-    for _, key in ipairs(testKeys) do
-        if addon.translationTable[key] then
-            d("[TraduzioneItaESO] Test OK: "    .. key .. " -> " .. addon.translationTable[key])
-        else
-            d("[TraduzioneItaESO] Test FALLITO: Traduzione non trovata per " .. key)
-        end
-    end
 end
 
 local function SetLanguage(lang)
@@ -875,14 +861,14 @@ local function SetLanguage(lang)
     end
 end
 local function ShowLanguageNotification(lang)
-    if not TraduzioneItaESO.account.showNotifications then return end
+    if not addon.account.showNotifications then return end
     local texturePath = lang == "en" and "/TraduzioneItaESO/textures/flag_en.dds" or "/TraduzioneItaESO/textures/flag_it.dds"
     local message = lang == "en" and "Lingua impostata su Inglese" or "Lingua impostata su Italiano"
     ZO_Alert(UI_ALERT_CATEGORY_ALERT, nil, string.format("|t24:24:%s|t %s", texturePath, message))
 end
 local function UpdateMapName()
     d("[TraduzioneItaESO] Funzione UpdateMapName chiamata")
-    if not TraduzioneItaESO.account.bilingualMapNames and not TraduzioneItaESO.account.useEnglishNames then
+    if not addon.account.bilingualMapNames and not addon.account.useEnglishNames then
         d("[TraduzioneItaESO] Nomi bilingui e nomi inglesi disabilitati")
         return
     end
@@ -898,9 +884,9 @@ local function UpdateMapName()
     if nativeLabel then
         local newText = mapName
         if currentLang == "it" then
-            if TraduzioneItaESO.account.bilingualMapNames then
-                newText = TraduzioneItaESO.account.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", mapName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", mapName, ColorizeEnglish(englishName))
-            elseif TraduzioneItaESO.account.useEnglishNames and GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+            if addon.account.bilingualMapNames then
+                newText = addon.account.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", mapName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", mapName, ColorizeEnglish(englishName))
+            elseif addon.account.useEnglishNames and GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
                 newText = englishName
             end
         end
@@ -908,7 +894,7 @@ local function UpdateMapName()
     end
 end
 local function UpdateNPCName()
-    if not TraduzioneItaESO.account.bilingualNPCNames then return end
+    if not addon.account.bilingualNPCNames then return end
     local currentLang = GetCVar("language.2")
     local unitName = GetUnitName("interact")
     local unitNoSuffix = unitName:gsub("%^%a+$", "")
@@ -923,10 +909,10 @@ local function UpdateNPCName()
     end
 end
 local function UpdateUIVisibility(hidden)
-    if not TraduzioneItaESO.account.enableUI then return end
+    if not addon.account.enableUI then return end
     local uiControl = WINDOW_MANAGER:GetControlByName("TraduzioneItaESOUI")
     if uiControl then
-        if TraduzioneItaESO.account.hideDuringGameplay then
+        if addon.account.hideDuringGameplay then
             uiControl:SetHidden(not hidden)
         else
             uiControl:SetHidden(false)
@@ -938,12 +924,12 @@ local function RefreshUI()
     if not uiControl then
         uiControl = WINDOW_MANAGER:CreateTopLevelWindow("TraduzioneItaESOUI")
         uiControl:SetDimensions(68, 32)
-        uiControl:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, TraduzioneItaESO.account.offsetX, TraduzioneItaESO.account.offsetY)
+        uiControl:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, addon.account.offsetX, addon.account.offsetY)
         uiControl:SetMovable(true)
         uiControl:SetMouseEnabled(true)
         uiControl:SetHandler("OnMoveStop", function()
-            TraduzioneItaESO.account.offsetX = uiControl:GetLeft()
-            TraduzioneItaESO.account.offsetY = uiControl:GetTop()
+            addon.account.offsetX = uiControl:GetLeft()
+            addon.account.offsetY = uiControl:GetTop()
         end)
         d("[TraduzioneItaESO] Creato controllo TraduzioneItaESOUI")
     end
@@ -962,24 +948,24 @@ local function RefreshUI()
             flagControl:SetHandler("OnClicked", function(self, button)
                 if button == MOUSE_BUTTON_INDEX_LEFT then
                     d("[TraduzioneItaESO] Clic su bandiera: " .. flagCode)
-                    TraduzioneItaESO.account.language = flagCode
+                    addon.account.language = flagCode
                     ShowLanguageNotification(flagCode)
                     SetLanguage(flagCode)
                 end
             end)
         end
         flagControl:SetHidden(false)
-        flagControl:SetAlpha(TraduzioneItaESO.account.language == flagCode and 1.0 or 0.7)
+        flagControl:SetAlpha(addon.account.language == flagCode and 1.0 or 0.7)
     end
     UpdateUIVisibility(IsReticleHidden())
 end
 local function HookPoiTooltips()
     local function AddBilingualName(pin)
-        if not TraduzioneItaESO.account.bilingualPOI then return end
+        if not addon.account.bilingualPOI then return end
         local localizedName = ZO_WorldMapMouseoverName:GetText()
         local localizedNoSuffix = localizedName:gsub("%^%a+$", "")
         local englishName = addon.translationTable[localizedNoSuffix] or localizedNoSuffix  -- Fallback a IT se non trovato
-        local locString = TraduzioneItaESO.account.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", localizedName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> / <<2>>", localizedName, ColorizeEnglish(englishName))
+        local locString = addon.account.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", localizedName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> / <<2>>", localizedName, ColorizeEnglish(englishName))
         ZO_WorldMapMouseoverName:SetText(locString)
         d("[TraduzioneItaESO] Bilingue applicato per POI: " .. locString)
         if not addon.translationTable[localizedNoSuffix] then
@@ -998,29 +984,31 @@ local function HookPoiTooltips()
     end
 end
 local function HookShrineTooltips()
-  local function AddBilingualShrineName(pin)
-    if not addon.account.bilingualPOI then return end
-    local localizedName    = ZO_WorldMapMouseoverName:GetText()
-    local baseName         = localizedName:gsub("%^%a+$", "")
-    local englishName      = addon.translationTable[baseName] or baseName
-    local fmt              = addon.account.bilingualNewLine 
-                              and "<<1>>\n<<2>>" 
-                              or "<<1>> / <<2>>"
-    local locString        = zo_strformat(fmt, localizedName, ColorizeEnglish(englishName))
-    ZO_WorldMapMouseoverName:SetText(locString)
-  end
+    local function AddEnglishToTooltip()
+        if not addon.account.bilingualPOI then return end
+        local localized = ZO_WorldMapMouseoverName:GetText()
+        local baseName  = localized:gsub("%^%a+$", "")
+        local english   = addon.translationTable[baseName] or baseName
+        local fmt       = addon.account.bilingualNewLine
+                          and "<<1>>\n<<2>>"
+                          or "<<1>> (<<2>>)"
+        local text      = zo_strformat(fmt, localized, ColorizeEnglish(english))
+        ZO_WorldMapMouseoverName:SetText(text)
+    end
 
-  local creatorFTWS1 = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE].creator
-  ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE].creator = function(...)
-    creatorFTWS1(...)
-    AddBilingualShrineName(...)
-  end
+    -- pin “normale”
+    local orig1 = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE].creator
+    ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE].creator = function(...)
+        orig1(...)
+        AddEnglishToTooltip()
+    end
 
-  local creatorFTWS2 = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE_CURRENT_LOC].creator
-  ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE_CURRENT_LOC].creator = function(...)
-    creatorFTWS2(...)
-    AddBilingualShrineName(...)
-  end
+    -- pin “current location”
+    local orig2 = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE_CURRENT_LOC].creator
+    ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE_CURRENT_LOC].creator = function(...)
+        orig2(...)
+        AddEnglishToTooltip()
+    end
 end
 local function HookKeepTooltips()
     local function AnchorTo(control, anchorTo)
@@ -1031,12 +1019,12 @@ local function HookKeepTooltips()
         end
     end
     local function ModifyKeepTooltip(self, keepId)
-        if not TraduzioneItaESO.account.bilingualPOI then return end
+        if not addon.account.bilingualPOI then return end
         local keepName = GetKeepName(keepId)
         local keepNoSuffix = keepName:gsub("%^%a+$", "")
         local englishKeepName = addon.translationTable[keepNoSuffix] or keepNoSuffix  -- Fallback a IT se non trovato
         local nameLabel = self:GetNamedChild("Name")
-        local displayText = TraduzioneItaESO.account.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", keepName, ColorizeEnglish(englishKeepName)) or zo_strformat("<<1>> / <<2>>", keepName, ColorizeEnglish(englishKeepName))
+        local displayText = addon.account.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", keepName, ColorizeEnglish(englishKeepName)) or zo_strformat("<<1>> / <<2>>", keepName, ColorizeEnglish(englishKeepName))
         nameLabel:SetText(displayText)
         d("[TraduzioneItaESO] Bilingue applicato per Keep: " .. displayText)
         if not addon.translationTable[keepNoSuffix] then
@@ -1057,30 +1045,30 @@ local function HookKeepTooltips()
     end
 end
 
-local em = GetEventManager()
-
-local function OnAddonLoaded(_, addonName)
-    if addonName ~= addon.name then return end
-    -- togliamo solo l’evento ADD_ON_LOADED, non PLAYER_ACTIVATED
-    em:UnregisterForEvent(addon.name, EVENT_ADD_ON_LOADED)
-    -- 2.1) SavedVars con il flag bilingualPOI a true di default
-    local defaults = {
+function addon:Initialize()
+    -- SavedVars, defaults compreso bilingualPOI = true
+    self.account = ZO_SavedVars:NewAccountWide("TraduzioneItaESO_Vars", 1, nil, {
         bilingualMapNames = true,
         useEnglishNames   = false,
         bilingualNewLine  = true,
         showNotifications = true,
         bilingualPOI      = true,
-    }
-    addon.account = ZO_SavedVars:NewAccountWide("TraduzioneItaESO_Vars", 1, nil, defaults)
+        enableUI = false,
+        hideDuringGameplay = false,
+        offsetX = 0,
+        offsetY = 0,
+        hidePinsOnTamriel = false,
+        bilingualColor = "FFFFFF",
+        opacity = 50,
+        showLocations = true,
+    })
 
-    -- 2.2) Carichiamo la tabella delle traduzioni
+    -- popolo addon.translationTable
     LoadTranslationTable()
 
-    -- 2.3) Punto 4: agganciamo gli hook dei tooltip
-    if addon.account.bilingualPOI then
-        HookPoiTooltips()
+    -- aggancio i tooltip degli altari
+    if self.account.bilingualPOI then
         HookShrineTooltips()
-        HookKeepTooltips()
     end
 
     d("[TraduzioneItaESO] Lingua corrente: " .. GetCVar("language.2"))
@@ -1088,7 +1076,7 @@ local function OnAddonLoaded(_, addonName)
     EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_RETICLE_HIDDEN_UPDATE, function(eventCode, hidden)
         UpdateUIVisibility(hidden)
     end)
-    if addon.account.bilingualMapNames or addon.account.useEnglishNames then
+    if self.account.bilingualMapNames or self.account.useEnglishNames then
         d("[TraduzioneItaESO] Registrazione eventi mappa")
         EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_ZONE_UPDATE, UpdateMapName)
         EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_MAP_CHUNK_INFO_RECEIVED, UpdateMapName)
@@ -1110,10 +1098,10 @@ local function OnAddonLoaded(_, addonName)
             end
         end)
     end
-    -- 2.4) Registriamo l’evento per aggiornare i nomi in mappa
-    em:RegisterForEvent(addon.name, EVENT_PLAYER_ACTIVATED, UpdateMapName)
-    -- E lanciamo subito un UpdateMapName per far vedere subito i nomi corretti
+    -- aggiorno il nome mappa al login/reload
+    EVENT_MANAGER:RegisterForEvent(self.name, EVENT_PLAYER_ACTIVATED, UpdateMapName)
     UpdateMapName()
+    addon:InitializeMap()
     local LAM = LibAddonMenu2
     local panelData = {
         type = "panel",
@@ -1277,9 +1265,6 @@ local function OnAddonLoaded(_, addonName)
     LAM:RegisterAddonPanel(addon.name .. "Options", panelData)
     LAM:RegisterOptionControls(addon.name .. "Options", optionsData)
 end
-
--- qui registriamo ADD_ON_LOADED, non PLAYER_ACTIVATED
-em:RegisterForEvent(addon.name, EVENT_ADD_ON_LOADED, OnAddonLoaded)
 
 -- Slash commands
 SLASH_COMMANDS["/itaesoit"] = function()
