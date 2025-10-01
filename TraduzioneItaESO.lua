@@ -403,7 +403,7 @@ local lookup = {
 }
 
 function addon:ApplyOpacity()
-	local opacity = self.account.color ~= "None" and (self.account.opacity / 250) or 0
+	local opacity = self.savedVars.opacity / 100
 	self.color[ALLIANCE_DAGGERFALL_COVENANT]:SetAlpha(opacity * 1.25)
 	self.color[ALLIANCE_ALDMERI_DOMINION]:SetAlpha(opacity)
 	self.color[ALLIANCE_EBONHEART_PACT]:SetAlpha(opacity)
@@ -414,10 +414,10 @@ function addon:ApplyOpacity()
 end
 
 function addon:ApplyColors()
-	if self.account.color == "BaseGame" then
+	if self.savedVars.color == "BaseGame" then
 		self.GetColor = self.GetBaseGameColor
 		self.GetDefaultColor = self.GetBaseGameColor
-	elseif self.account.color == "None" then
+	elseif self.savedVars.color == "None" then
 		self.GetColor = self.GetNoColor
 		self.GetDefaultColor = self.GetNoColor
 	else
@@ -427,118 +427,266 @@ function addon:ApplyColors()
 end
 
 function addon:InitSettings()
-	local accountDefaults = {
-		hidePins = true,
-		titleFont = "ANTIQUE_FONT",
-		color = "Alliance",
-		opacity = 50,
-		showLocations = true,
-		showCitiesNames = true
+	local LAM = LibAddonMenu2
+	local panelData = {
+		type = "panel",
+		name = "Traduzione Italiana ESO",
+		displayName = "|cFFD700Traduzione Italiana ESO|r",
+		author = "Muflonebarbuto",
+		version = addon.version,
+		slashCommand = "/itaeso",
+		registerForRefresh = true,
+		registerForDefaults = true
 	}
-	self.account = ZO_SavedVars:NewAccountWide("VotansTamrielMap_Data", 1, nil, accountDefaults)
-	local LibHarvensAddonSettings = LibHarvensAddonSettings
+	local optionsData = {
+		{
+			type = "dropdown",
+			name = "Seleziona Lingua",
+			choices = {"Italiano", "Inglese"},
+			choicesValues = {"it", "en"},
+			getFunc = function() return self.savedVars.language end,
+			setFunc = function(value)
+				self.savedVars.language = value
+				ShowLanguageNotification(value)
+				SetLanguage(value)
+			end,
+			tooltip = "Scegli la lingua del gioco.",
+			requiresReload = true
+		},
+		{
+			type = "checkbox",
+			name = "Mostra Notifiche",
+			tooltip = "Abilita/disabilita notifiche con bandierina al cambio lingua.",
+			getFunc = function() return self.savedVars.showNotifications end,
+			setFunc = function(value) self.savedVars.showNotifications = value end
+		},
+		{
+			type = "checkbox",
+			name = "Mostra Bandierine UI",
+			tooltip = "Abilita/disabilita le bandierine cliccabili sullo schermo.",
+			getFunc = function() return self.savedVars.enableUI end,
+			setFunc = function(value)
+				self.savedVars.enableUI = value
+				UpdateUIVisibility(IsReticleHidden())
+			end
+		},
+		{
+			type = "checkbox",
+			name = "Nascondi Bandierine durante Gameplay",
+			tooltip = "Nascondi le bandierine quando il mirino è attivo.",
+			getFunc = function() return self.savedVars.hideDuringGameplay end,
+			setFunc = function(value)
+				self.savedVars.hideDuringGameplay = value
+				UpdateUIVisibility(IsReticleHidden())
+			end
+		},
+		{
+			type = "checkbox",
+			name = "Nomi Bilingui sulla Mappa",
+			tooltip = "Mostra nomi delle zone in italiano e inglese (es. 'Deserto di Alik'r\nAlik'r Desert').",
+			getFunc = function() return self.savedVars.bilingualMapNames end,
+			setFunc = function(value)
+				self.savedVars.bilingualMapNames = value
+				UpdateMapName()
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					self:RenderMap(self.savedVars.showLocations)
+				end
+			end
+		},
+		{
+			type = "checkbox",
+			name = "Usa Nomi Inglesi su Tamriel",
+			tooltip = "Mostra i nomi inglesi delle zone sulla mappa di Tamriel (stile Votan's Tamriel Map).",
+			getFunc = function() return self.savedVars.useEnglishNames end,
+			setFunc = function(value)
+				self.savedVars.useEnglishNames = value
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					self:RenderMap(self.savedVars.showLocations)
+				end
+			end
+		},
+		{
+			type = "checkbox",
+			name = "Mostra Regioni su Tamriel",
+			tooltip = "Mostra i nomi delle regioni sulla mappa di Tamriel.",
+			getFunc = function() return self.savedVars.showLocations end,
+			setFunc = function(value)
+				self.savedVars.showLocations = value
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					self:RenderMap(value)
+				end
+			end
+		},
+		{
+			type = "checkbox",
+			name = "Mostra Nomi Città su Tamriel",
+			tooltip = "Mostra i nomi delle città sulla mappa di Tamriel.",
+			getFunc = function() return self.savedVars.showCitiesNames end,
+			setFunc = function(value)
+				self.savedVars.showCitiesNames = value
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					self:RenderMap(self.savedVars.showLocations)
+				end
+			end
+		},
+		{
+			type = "checkbox",
+			name = "Nascondi Wayshrine su Tamriel",
+			tooltip = "Nasconde i pin dei wayshrine sulla mappa di Tamriel (stile Votan's).",
+			getFunc = function() return self.savedVars.hidePinsOnTamriel end,
+			setFunc = function(value)
+				self.savedVars.hidePinsOnTamriel = value
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					ZO_WorldMap_GetPinManager():SetPinGroupShown(MAP_FILTER_WAYSHRINES, not value)
+				end
+			end
+		},
+		{
+			type = "checkbox",
+			name = "Nomi Bilingui nei Tooltips (POI/Keeps/Shrines)",
+			tooltip = "Mostra nomi in italiano e inglese nei tooltips quando passi il mouse su POI, Keeps o Shrines.",
+			getFunc = function() return self.savedVars.bilingualPOI end,
+			setFunc = function(value) 
+				self.savedVars.bilingualPOI = value 
+				if value then
+					HookPoiTooltips()
+					HookShrineTooltips()
+					HookKeepTooltips()
+				end
+				ZO_WorldMap_RefreshAllPOIs()
+			end,
+			requiresReload = true
+		},
+		{
+			type = "checkbox",
+			name = "Nome Inglese su Nuova Linea",
+			tooltip = "Mostra il nome inglese su una nuova linea sotto quello italiano nei tooltips e mappe.",
+			getFunc = function() return self.savedVars.bilingualNewLine end,
+			setFunc = function(value) 
+				self.savedVars.bilingualNewLine = value 
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					self:RenderMap(self.savedVars.showLocations)
+				end
+			end,
+			disabled = function() return not self.savedVars.bilingualPOI and not self.savedVars.bilingualMapNames end
+		},
+		{
+			type = "colorpicker",
+			name = "Colore Nome Inglese",
+			tooltip = "Colore per il nome inglese nei tooltips e mappe.",
+			getFunc = function() return ZO_ColorDef:New(self.savedVars.bilingualColor):UnpackRGBA() end,
+			setFunc = function(r, g, b, a) 
+				self.savedVars.bilingualColor = ZO_ColorDef:New(r, g, b, a):ToHex() 
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					self:RenderMap(self.savedVars.showLocations)
+				end
+			end,
+			default = ZO_ColorDef:New("FFFFFF"),
+			disabled = function() return not self.savedVars.bilingualPOI and not self.savedVars.bilingualMapNames end
+		},
+		{
+			type = "dropdown",
+			name = GetString(SI_VOTANS_TAMRIEL_MAP_FONT),
+			choices = lookup.fontNames,
+			getFunc = function() return self.savedVars.titleFont end,
+			setFunc = function(value)
+				self.savedVars.titleFont = value
+				self:createFont()
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					self:RenderMap(self.savedVars.showLocations)
+				end
+			end,
+		},
+		{
+			type = "dropdown",
+			name = GetString(SI_GUILD_HERALDRY_COLOR),
+			choices = lookup.colorNames,
+			getFunc = function() return self.savedVars.color end,
+			setFunc = function(value)
+				self.savedVars.color = value
+				self:ApplyColors()
+				self:ApplyOpacity()
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					self:RenderMap(self.savedVars.showLocations)
+				end
+			end,
+		},
+		{
+			type = "slider",
+			name = GetString(SI_COLOR_PICKER_ALPHA),
+			min = 10,
+			max = 100,
+			step = 1,
+			getFunc = function() return self.savedVars.opacity end,
+			setFunc = function(value)
+				self.savedVars.opacity = value
+				self:ApplyOpacity()
+				if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+					self:RenderMap(self.savedVars.showLocations)
+				end
+			end,
+		},
+		{
+			type = "texture",
+			image = "/TraduzioneItaESO/textures/flag_it.dds",
+			imageWidth = 24,
+			imageHeight = 24,
+			tooltip = "Bandiera italiana per il tuo addon!",
+			width = "half"
+		},
+		{
+			type = "texture",
+			image = "/TraduzioneItaESO/textures/flag_en.dds",
+			imageWidth = 24,
+			imageHeight = 24,
+			tooltip = "Bandiera inglese per il tuo addon!",
+			width = "half"
+		}
+	}
+	LAM:RegisterAddonPanel(addon.name .. "Options", panelData)
+	LAM:RegisterOptionControls(addon.name .. "Options", optionsData)
 
-	local settings = LibHarvensAddonSettings:AddAddon("Votan's Tamriel Map")
-	if not settings then
-		return
-	end
-	addon.settingsControls = settings
-	settings.allowDefaults = true
-	settings.version = "1.2.4"
-	settings.website = "https://www.esoui.com/downloads/info2672-VotansTamrielMap.html"
-
-	local function createFont()
-		local size, sizeCity = unpack(lookup.fontSizes[self.account.titleFont])
-		self.titleFont = string.format("$(%s)|%i|soft-shadow-thick", self.account.titleFont, size)
-		self.cityFont = string.format("$(%s)|%i|soft-shadow-thick", self.account.titleFont, sizeCity)
-	end
+	lookup.fontNames = {}
 	lookup.nameToFont = {}
 	for _, item in pairs(lookup.fonts) do
-		lookup.nameToFont[item.data] = item
+		table.insert(lookup.fontNames, item.name)
+		lookup.nameToFont[item.name] = item.data
 	end
-	if not lookup.nameToFont[self.account.titleFont] then
-		self.account.titleFont = accountDefaults.titleFont
-	end
-	settings:AddSetting {
-		type = LibHarvensAddonSettings.ST_DROPDOWN,
-		label = GetString(SI_VOTANS_TAMRIEL_MAP_FONT),
-		items = lookup.fonts,
-		default = lookup.nameToFont[accountDefaults.titleFont].name,
-		getFunction = function()
-			return lookup.nameToFont[self.account.titleFont].name
-		end,
-		setFunction = function(combobox, name, item)
-			self.account.titleFont = item.data
-			createFont()
-		end
-	}
-	createFont()
-
+	lookup.colorNames = {}
 	lookup.nameToColor = {}
 	for _, item in pairs(lookup.colors) do
-		lookup.nameToColor[item.data] = item
+		table.insert(lookup.colorNames, item.name)
+		lookup.nameToColor[item.name] = item.data
 	end
-	if not lookup.nameToColor[self.account.color] then
-		self.account.color = accountDefaults.color
-	end
-	settings:AddSetting {
-		type = LibHarvensAddonSettings.ST_DROPDOWN,
-		label = GetString(SI_GUILD_HERALDRY_COLOR),
-		items = lookup.colors,
-		default = lookup.nameToColor[accountDefaults.color].name,
-		getFunction = function()
-			return lookup.nameToColor[self.account.color].name
-		end,
-		setFunction = function(combobox, name, item)
-			self.account.color = item.data
-			self:ApplyColors()
-			self:ApplyOpacity()
-		end
-	}
 
-	settings:AddSetting {
-		type = LibHarvensAddonSettings.ST_SLIDER,
-		label = GetString(SI_COLOR_PICKER_ALPHA),
-		tooltip = "",
-		min = 10,
-		max = 100,
-		step = 1,
-		format = "%f",
-		unit = "",
-		default = 50,
-		getFunction = function()
-			return self.account.opacity
-		end,
-		setFunction = function(value)
-			self.account.opacity = value
-			self:ApplyOpacity()
-		end
-	}
+	self.savedVars = ZO_SavedVars:NewAccountWide("TraduzioneItaESO_Vars", 1, nil, {
+		language = "it",
+		showNotifications = true,
+		enableUI = true,
+		hideDuringGameplay = true,
+		bilingualMapNames = true,
+		bilingualNPCNames = false,
+		useEnglishNames = true,
+		showLocations = true,
+		showCitiesNames = true,
+		bilingualPOI = true,
+		bilingualNewLine = true,
+		bilingualColor = "FFFFFF",
+		hidePinsOnTamriel = true,
+		opacity = 50,
+		titleFont = "ANTIQUE_FONT",
+		color = "Alliance"
+	})
 
-	settings:AddSetting {
-		type = LibHarvensAddonSettings.ST_CHECKBOX,
-		label = GetString(SI_VOTANS_TAMRIEL_MAP_SHOW_LOCATIONS),
-		tooltip = "",
-		default = accountDefaults.showLocations,
-		getFunction = function()
-			return self.account.showLocations
-		end,
-		setFunction = function(value)
-			self.account.showLocations = value
-		end
-	}
-	settings:AddSetting {
-		type = LibHarvensAddonSettings.ST_CHECKBOX,
-		label = GetString(SI_VOTANS_TAMRIEL_MAP_SHOW_CITIES_NAME),
-		tooltip = "",
-		default = accountDefaults.showCitiesNames,
-		getFunction = function()
-			return self.account.showCitiesNames
-		end,
-		setFunction = function(value)
-			self.account.showCitiesNames = value
-		end
-	}
+	self:createFont()
+	self:ApplyColors()
+	self:ApplyOpacity()
+end
+
+function addon:createFont()
+	local size, sizeCity = unpack(lookup.fontSizes[self.savedVars.titleFont] or {18, 14})
+	self.titleFont = string.format("$(%s)|%i|soft-shadow-thick", self.savedVars.titleFont, size)
+	self.cityFont = string.format("$(%s)|%i|soft-shadow-thick", self.savedVars.titleFont, sizeCity)
 end
 
 local MapBlobManager = ZO_ObjectPool:Subclass()
@@ -629,7 +777,8 @@ function addon:RenderMap(isTamriel)
 	local positions = self.positions
 	local bm, gps = self.blobManager, LibGPS3
 	local hidePins = not ZO_WorldMap_IsPinGroupShown(MAP_FILTER_WAYSHRINES)
-	local showCities, showLocations = self.account.showCitiesNames, self.account.showLocations
+	local showCities, showLocations = self.savedVars.showCitiesNames, self.savedVars.showLocations
+	local currentLang = GetCVar("language.2")
 	for i, pos in pairs(positions) do
 		local x, y = pos:GetOffset()
 		local w, h = pos:GetScale()
@@ -642,7 +791,17 @@ function addon:RenderMap(isTamriel)
 				local queryY = location.blobY or (y + (location.offsetY or 0))
 				local blob = bm:Update(queryX, queryY)
 				if blob then
-					blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, location.name or ""))
+					local zoneEnglish = location.name or ""
+					local zoneItalian = self.reverseTable[zoneEnglish] or zoneEnglish
+					local labelText = currentLang == "it" and zoneItalian or zoneEnglish
+					if currentLang == "it" then
+						if self.savedVars.bilingualMapNames and self.translationTable[zoneItalian] then
+							labelText = self.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", zoneItalian, ColorizeEnglish(self.translationTable[zoneItalian])) or zo_strformat("<<1>> (<<2>>)", zoneItalian, ColorizeEnglish(self.translationTable[zoneItalian]))
+						elseif self.savedVars.useEnglishNames then
+							labelText = self.translationTable[zoneItalian] or zoneItalian
+						end
+					end
+					blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, labelText))
 					blob.label:SetHidden(not showLocations)
 					if showLocations then
 						local locXN, locYN = NormalizedLabelDataToUI(location.labelX, location.labelY)
@@ -659,9 +818,25 @@ function addon:RenderMap(isTamriel)
 						blob.label:SetText("")
 					end
 					blob.city:SetFont(self.cityFont)
-					blob.city:SetText(ZO_CachedStrFormat("<<!AC:1>>", location.cityName or ""))
+					local cityEnglish = location.cityName or ""
+					local cityItalian = self.reverseTable[cityEnglish] or cityEnglish
+					local cityText = currentLang == "it" and cityItalian or cityEnglish
+					if currentLang == "it" then
+						if self.savedVars.bilingualMapNames and self.translationTable[cityItalian] then
+							cityText = self.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cityItalian, ColorizeEnglish(self.translationTable[cityItalian])) or zo_strformat("<<1>> (<<2>>)", cityItalian, ColorizeEnglish(self.translationTable[cityItalian]))
+						elseif self.savedVars.useEnglishNames then
+							cityText = self.translationTable[cityItalian] or cityItalian
+						end
+					end
+					blob.city:SetText(ZO_CachedStrFormat("<<!AC:1>>", cityText))
 
 					if location.poi and showCities then
+						local _, known, localX, localY = GetFastTravelNodeInfo(location.poi)
+						if known then
+							local globalX, globalY = gps:LocalToGlobal(localX, localY)
+							location.poiGlobalX = globalX
+							location.poiGlobalY = globalY
+						end
 						local locXN = location.poiGlobalX
 						local locYN = location.poiGlobalY
 						local labelX, labelY = x + (location.labelX or 0), y + (location.labelY or 0)
@@ -679,10 +854,13 @@ function addon:RenderMap(isTamriel)
 						blob.city:ClearAnchors()
 					end
 
-					blob.city:SetHidden(not location.cityName or not self.account.showCitiesNames)
+					blob.city:SetHidden(not location.cityName or not self.savedVars.showCitiesNames)
 				end
 			end
 		end
+	end
+	if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX and self.savedVars.hidePinsOnTamriel then
+		ZO_WorldMap_GetPinManager():SetPinGroupShown(MAP_FILTER_WAYSHRINES, false)
 	end
 end
 
@@ -758,9 +936,6 @@ function addon:InitializeMap()
 
 	gps:PopCurrentMap()
 
-	self:ApplyOpacity()
-	self:ApplyColors()
-
 	--self:HookPOIPins()
 	-- self:HookTravelInfo()
 
@@ -834,7 +1009,7 @@ em:RegisterForEvent(addon.name, EVENT_ADD_ON_LOADED, function(_, addonName)
 end)
 
 local function ColorizeEnglish(text)
-    return ZO_ColorDef:New(addon.account.bilingualColor or "FFFFFF"):Colorize(text)
+    return ZO_ColorDef:New(addon.savedVars.bilingualColor or "FFFFFF"):Colorize(text)
 end
 
 local function LoadTranslationTable()
@@ -861,14 +1036,14 @@ local function SetLanguage(lang)
     end
 end
 local function ShowLanguageNotification(lang)
-    if not addon.account.showNotifications then return end
+    if not addon.savedVars.showNotifications then return end
     local texturePath = lang == "en" and "/TraduzioneItaESO/textures/flag_en.dds" or "/TraduzioneItaESO/textures/flag_it.dds"
     local message = lang == "en" and "Lingua impostata su Inglese" or "Lingua impostata su Italiano"
     ZO_Alert(UI_ALERT_CATEGORY_ALERT, nil, string.format("|t24:24:%s|t %s", texturePath, message))
 end
 local function UpdateMapName()
     d("[TraduzioneItaESO] Funzione UpdateMapName chiamata")
-    if not addon.account.bilingualMapNames and not addon.account.useEnglishNames then
+    if not addon.savedVars.bilingualMapNames and not addon.savedVars.useEnglishNames then
         d("[TraduzioneItaESO] Nomi bilingui e nomi inglesi disabilitati")
         return
     end
@@ -878,23 +1053,23 @@ local function UpdateMapName()
         mapName = GetUnitZone("player")
     end
     local mapNameNoSuffix = mapName:gsub("%^%a+$", "")
-    local englishName = addon.translationTable[mapNameNoSuffix] or mapNameNoSuffix
-    d("[TraduzioneItaESO] Lingua: " .. currentLang .. ", MapName: " .. mapName .. ", Traduzione: " .. englishName)
+    local englishName = addon.translationTable[mapNameNoSuffix]
+    local newText = mapName
+    if currentLang == "it" then
+        if addon.savedVars.bilingualMapNames and englishName then
+            newText = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", mapName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", mapName, ColorizeEnglish(englishName))
+        elseif addon.savedVars.useEnglishNames and englishName then
+            newText = englishName
+        end
+    end
     local nativeLabel = ZO_WorldMapZoneNameLabel
     if nativeLabel then
-        local newText = mapName
-        if currentLang == "it" then
-            if addon.account.bilingualMapNames then
-                newText = addon.account.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", mapName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", mapName, ColorizeEnglish(englishName))
-            elseif addon.account.useEnglishNames and GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
-                newText = englishName
-            end
-        end
         nativeLabel:SetText(newText)
     end
+    d("[TraduzioneItaESO] Lingua: " .. currentLang .. ", MapName: " .. mapName .. ", Traduzione: " .. (englishName or "non trovato, fallback a " .. mapName))
 end
 local function UpdateNPCName()
-    if not addon.account.bilingualNPCNames then return end
+    if not addon.savedVars.bilingualNPCNames then return end
     local currentLang = GetCVar("language.2")
     local unitName = GetUnitName("interact")
     local unitNoSuffix = unitName:gsub("%^%a+$", "")
@@ -909,10 +1084,10 @@ local function UpdateNPCName()
     end
 end
 local function UpdateUIVisibility(hidden)
-    if not addon.account.enableUI then return end
+    if not addon.savedVars.enableUI then return end
     local uiControl = WINDOW_MANAGER:GetControlByName("TraduzioneItaESOUI")
     if uiControl then
-        if addon.account.hideDuringGameplay then
+        if addon.savedVars.hideDuringGameplay then
             uiControl:SetHidden(not hidden)
         else
             uiControl:SetHidden(false)
@@ -924,12 +1099,12 @@ local function RefreshUI()
     if not uiControl then
         uiControl = WINDOW_MANAGER:CreateTopLevelWindow("TraduzioneItaESOUI")
         uiControl:SetDimensions(68, 32)
-        uiControl:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, addon.account.offsetX, addon.account.offsetY)
+        uiControl:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, addon.savedVars.offsetX, addon.savedVars.offsetY)
         uiControl:SetMovable(true)
         uiControl:SetMouseEnabled(true)
         uiControl:SetHandler("OnMoveStop", function()
-            addon.account.offsetX = uiControl:GetLeft()
-            addon.account.offsetY = uiControl:GetTop()
+            addon.savedVars.offsetX = uiControl:GetLeft()
+            addon.savedVars.offsetY = uiControl:GetTop()
         end)
         d("[TraduzioneItaESO] Creato controllo TraduzioneItaESOUI")
     end
@@ -948,28 +1123,31 @@ local function RefreshUI()
             flagControl:SetHandler("OnClicked", function(self, button)
                 if button == MOUSE_BUTTON_INDEX_LEFT then
                     d("[TraduzioneItaESO] Clic su bandiera: " .. flagCode)
-                    addon.account.language = flagCode
+                    addon.savedVars.language = flagCode
                     ShowLanguageNotification(flagCode)
                     SetLanguage(flagCode)
                 end
             end)
         end
         flagControl:SetHidden(false)
-        flagControl:SetAlpha(addon.account.language == flagCode and 1.0 or 0.7)
+        flagControl:SetAlpha(addon.savedVars.language == flagCode and 1.0 or 0.7)
     end
     UpdateUIVisibility(IsReticleHidden())
 end
 local function HookPoiTooltips()
     local function AddBilingualName(pin)
-        if not addon.account.bilingualPOI then return end
+        if not addon.savedVars.bilingualPOI then return end
         local localizedName = ZO_WorldMapMouseoverName:GetText()
         local localizedNoSuffix = localizedName:gsub("%^%a+$", "")
-        local englishName = addon.translationTable[localizedNoSuffix] or localizedNoSuffix  -- Fallback a IT se non trovato
-        local locString = addon.account.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", localizedName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> / <<2>>", localizedName, ColorizeEnglish(englishName))
+        local englishName = addon.translationTable[localizedNoSuffix]
+        local locString = localizedName
+        if englishName then
+            locString = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", localizedName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> / <<2>>", localizedName, ColorizeEnglish(englishName))
+        end
         ZO_WorldMapMouseoverName:SetText(locString)
         d("[TraduzioneItaESO] Bilingue applicato per POI: " .. locString)
-        if not addon.translationTable[localizedNoSuffix] then
-            d("[TraduzioneItaESO] Traduzione non trovata per POI: " .. localizedNoSuffix .. " - Usato fallback IT/IT")
+        if not englishName then
+            d("[TraduzioneItaESO] Traduzione non trovata per POI: " .. localizedNoSuffix .. " - Usato solo italiano")
         end
     end
     local CreatorPOISeen = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_POI_SEEN].creator
@@ -985,14 +1163,20 @@ local function HookPoiTooltips()
 end
 local function HookShrineTooltips()
     local function AddEnglishToTooltip()
-        if not addon.account.bilingualPOI then return end
+        if not addon.savedVars.bilingualPOI then return end
         local localized = ZO_WorldMapMouseoverName:GetText()
         local baseName  = localized:gsub("%^%a+$", "")
-        local english   = addon.translationTable[baseName] or baseName
-        local fmt       = addon.account.bilingualNewLine
-                          and "<<1>>\n<<2>>"
-                          or "<<1>> (<<2>>)"
-        local text      = zo_strformat(fmt, localized, ColorizeEnglish(english))
+        local english   = addon.translationTable[baseName]
+        local text      = localized
+        if english then
+            local fmt       = addon.savedVars.bilingualNewLine
+                              and "<<1>>\n<<2>>"
+                              or "<<1>> (<<2>>)"
+            text      = zo_strformat(fmt, localized, ColorizeEnglish(english))
+            d("[TraduzioneItaESO] Nome inglese trovato per Shrine: " .. english .. " - Mostrato bilingue")
+        else
+            d("[TraduzioneItaESO] Traduzione non trovata per Shrine: " .. baseName .. " - Mostrato solo italiano")
+        end
         ZO_WorldMapMouseoverName:SetText(text)
     end
 
@@ -1019,16 +1203,19 @@ local function HookKeepTooltips()
         end
     end
     local function ModifyKeepTooltip(self, keepId)
-        if not addon.account.bilingualPOI then return end
+        if not addon.savedVars.bilingualPOI then return end
         local keepName = GetKeepName(keepId)
         local keepNoSuffix = keepName:gsub("%^%a+$", "")
-        local englishKeepName = addon.translationTable[keepNoSuffix] or keepNoSuffix  -- Fallback a IT se non trovato
+        local englishKeepName = addon.translationTable[keepNoSuffix]
         local nameLabel = self:GetNamedChild("Name")
-        local displayText = addon.account.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", keepName, ColorizeEnglish(englishKeepName)) or zo_strformat("<<1>> / <<2>>", keepName, ColorizeEnglish(englishKeepName))
+        local displayText = keepName
+        if englishKeepName then
+            displayText = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", keepName, ColorizeEnglish(englishKeepName)) or zo_strformat("<<1>> / <<2>>", keepName, ColorizeEnglish(englishKeepName))
+        end
         nameLabel:SetText(displayText)
         d("[TraduzioneItaESO] Bilingue applicato per Keep: " .. displayText)
-        if not addon.translationTable[keepNoSuffix] then
-            d("[TraduzioneItaESO] Traduzione non trovata per Keep: " .. keepNoSuffix .. " - Usato fallback IT/IT")
+        if not englishKeepName then
+            d("[TraduzioneItaESO] Traduzione non trovata per Keep: " .. keepNoSuffix .. " - Usato solo italiano")
         end
     end
     local SetKeep = ZO_KeepTooltip.SetKeep
@@ -1047,7 +1234,7 @@ end
 
 function addon:Initialize()
     -- SavedVars, defaults compreso bilingualPOI = true
-    self.account = ZO_SavedVars:NewAccountWide("TraduzioneItaESO_Vars", 1, nil, {
+    self.savedVars = ZO_SavedVars:NewAccountWide("TraduzioneItaESO_Vars", 1, nil, {
         bilingualMapNames = true,
         useEnglishNames   = false,
         bilingualNewLine  = true,
@@ -1067,8 +1254,10 @@ function addon:Initialize()
     LoadTranslationTable()
 
     -- aggancio i tooltip degli altari
-    if self.account.bilingualPOI then
+    if self.savedVars.bilingualPOI then
         HookShrineTooltips()
+		HookPoiTooltips()
+		HookKeepTooltips()
     end
 
     d("[TraduzioneItaESO] Lingua corrente: " .. GetCVar("language.2"))
@@ -1076,7 +1265,7 @@ function addon:Initialize()
     EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_RETICLE_HIDDEN_UPDATE, function(eventCode, hidden)
         UpdateUIVisibility(hidden)
     end)
-    if self.account.bilingualMapNames or self.account.useEnglishNames then
+    if self.savedVars.bilingualMapNames or self.savedVars.useEnglishNames then
         d("[TraduzioneItaESO] Registrazione eventi mappa")
         EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_ZONE_UPDATE, UpdateMapName)
         EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_MAP_CHUNK_INFO_RECEIVED, UpdateMapName)
@@ -1094,7 +1283,7 @@ function addon:Initialize()
             local currentZoom = g_mapPanAndZoom:GetCurrentCurvedZoom()
             if math.abs(currentZoom - addon.lastZoom) > 0.001 then
                 addon.lastZoom = currentZoom
-                addon:RenderMap(addon.account.showLocations)
+                addon:RenderMap(addon.savedVars.showLocations)
             end
         end)
     end
@@ -1102,178 +1291,16 @@ function addon:Initialize()
     EVENT_MANAGER:RegisterForEvent(self.name, EVENT_PLAYER_ACTIVATED, UpdateMapName)
     UpdateMapName()
     addon:InitializeMap()
-    local LAM = LibAddonMenu2
-    local panelData = {
-        type = "panel",
-        name = "Traduzione Italiana ESO",
-        displayName = "|cFFD700Traduzione Italiana ESO|r",
-        author = "Muflonebarbuto",
-        version = addon.version,
-        slashCommand = "/itaeso",
-        registerForRefresh = true,
-        registerForDefaults = true
-    }
-    local optionsData = {
-        {
-            type = "dropdown",
-            name = "Seleziona Lingua",
-            choices = {"Italiano", "Inglese"},
-            choicesValues = {"it", "en"},
-            getFunc = function() return addon.account.language end,
-            setFunc = function(value)
-                addon.account.language = value
-                ShowLanguageNotification(value)
-                SetLanguage(value)
-            end,
-            tooltip = "Scegli la lingua del gioco.",
-            requiresReload = true
-        },
-        {
-            type = "checkbox",
-            name = "Mostra Notifiche",
-            tooltip = "Abilita/disabilita notifiche con bandierina al cambio lingua.",
-            getFunc = function() return addon.account.showNotifications end,
-            setFunc = function(value) addon.account.showNotifications = value end
-        },
-        {
-            type = "checkbox",
-            name = "Mostra Bandierine UI",
-            tooltip = "Abilita/disabilita le bandierine cliccabili sullo schermo.",
-            getFunc = function() return addon.account.enableUI end,
-            setFunc = function(value)
-                addon.account.enableUI = value
-                UpdateUIVisibility(IsReticleHidden())
-            end
-        },
-        {
-            type = "checkbox",
-            name = "Nascondi Bandierine durante Gameplay",
-            tooltip = "Nascondi le bandierine quando il mirino è attivo.",
-            getFunc = function() return addon.account.hideDuringGameplay end,
-            setFunc = function(value)
-                addon.account.hideDuringGameplay = value
-                UpdateUIVisibility(IsReticleHidden())
-            end
-        },
-        {
-            type = "checkbox",
-            name = "Nomi Bilingui sulla Mappa",
-            tooltip = "Mostra nomi delle zone in italiano e inglese (es. 'Deserto di Alik'r\nAlik'r Desert').",
-            getFunc = function() return addon.account.bilingualMapNames end,
-            setFunc = function(value)
-                addon.account.bilingualMapNames = value
-                UpdateMapName()
-                addon:RenderMap(addon.account.showLocations)
-            end
-        },
-        {
-            type = "checkbox",
-            name = "Usa Nomi Inglesi su Tamriel",
-            tooltip = "Mostra i nomi inglesi delle zone sulla mappa di Tamriel (stile Votan's Tamriel Map).",
-            getFunc = function() return addon.account.useEnglishNames end,
-            setFunc = function(value)
-                addon.account.useEnglishNames = value
-                addon:RenderMap(addon.account.showLocations)
-            end
-        },
-        {
-            type = "checkbox",
-            name = "Mostra Regioni su Tamriel",
-            tooltip = "Mostra i nomi delle regioni sulla mappa di Tamriel.",
-            getFunc = function() return addon.account.showLocations end,
-            setFunc = function(value)
-                addon.account.showLocations = value
-                addon:RenderMap(value)
-            end
-        },
-        {
-            type = "checkbox",
-            name = "Nascondi Wayshrine su Tamriel",
-            tooltip = "Nasconde i pin dei wayshrine sulla mappa di Tamriel (stile Votan's).",
-            getFunc = function() return addon.account.hidePinsOnTamriel end,
-            setFunc = function(value)
-                addon.account.hidePinsOnTamriel = value
-                if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
-                    ZO_WorldMap_GetPinManager():SetPinGroupShown(MAP_FILTER_WAYSHRINES, not value)
-                end
-            end
-        },
-        {
-            type = "checkbox",
-            name = "Nomi Bilingui nei Tooltips (POI/Keeps/Shrines)",
-            tooltip = "Mostra nomi in italiano e inglese nei tooltips quando passi il mouse su POI, Keeps o Shrines.",
-            getFunc = function() return addon.account.bilingualPOI end,
-            setFunc = function(value)
-                addon.account.bilingualPOI = value
-                if value then
-                    HookPoiTooltips()
-                    HookShrineTooltips()
-                    HookKeepTooltips()
-                end
-            end,
-            requiresReload = true
-        },
-        {
-            type = "checkbox",
-            name = "Nome Inglese su Nuova Linea",
-            tooltip = "Mostra il nome inglese su una nuova linea sotto quello italiano nei tooltips e mappe.",
-            getFunc = function() return addon.account.bilingualNewLine end,
-            setFunc = function(value) addon.account.bilingualNewLine = value end,
-            disabled = function() return not addon.account.bilingualPOI and not addon.account.bilingualMapNames end
-        },
-        {
-            type = "colorpicker",
-            name = "Colore Nome Inglese",
-            tooltip = "Colore per il nome inglese nei tooltips e mappe.",
-            getFunc = function() return ZO_ColorDef:New(addon.account.bilingualColor):UnpackRGBA() end,
-            setFunc = function(r, g, b, a) addon.account.bilingualColor = ZO_ColorDef:New(r, g, b, a):ToHex() end,
-            default = ZO_ColorDef:New("FFFFFF"),
-            disabled = function() return not addon.account.bilingualPOI and not addon.account.bilingualMapNames end
-        },
-        {
-            type = "slider",
-            name = "Opacità Overlay Mappa",
-            tooltip = "Regola trasparenza overlay regioni su Tamriel (stile Votan's).",
-            min = 0,
-            max = 100,
-            step = 1,
-            getFunc = function() return addon.account.opacity end,
-            setFunc = function(value)
-                addon.account.opacity = value
-                addon:ApplyOpacity()
-                addon:RenderMap(addon.account.showLocations)
-            end,
-            default = 50
-        },
-        {
-            type = "texture",
-            image = "/TraduzioneItaESO/textures/flag_it.dds",
-            imageWidth = 24,
-            imageHeight = 24,
-            tooltip = "Bandiera italiana per il tuo addon!",
-            width = "half"
-        },
-        {
-            type = "texture",
-            image = "/TraduzioneItaESO/textures/flag_en.dds",
-            imageWidth = 24,
-            imageHeight = 24,
-            tooltip = "Bandiera inglese per il tuo addon!",
-            width = "half"
-        }
-    }
-    LAM:RegisterAddonPanel(addon.name .. "Options", panelData)
-    LAM:RegisterOptionControls(addon.name .. "Options", optionsData)
 end
 
 -- Slash commands
 SLASH_COMMANDS["/itaesoit"] = function()
-    addon.account.language = "it"
+    addon.savedVars.language = "it"
     ShowLanguageNotification("it")
     SetLanguage("it")
 end
 SLASH_COMMANDS["/itaesoen"] = function()
-    addon.account.language = "en"
+    addon.savedVars.language = "en"
     ShowLanguageNotification("en")
     SetLanguage("en")
 end
@@ -1284,7 +1311,7 @@ end
 SLASH_COMMANDS["/testitaeso"] = function()
     d("[TraduzioneItaESO] Test comando /testitaeso")
     UpdateMapName()
-    addon:RenderMap(addon.account.showLocations)
+    addon:RenderMap(addon.savedVars.showLocations)
 end
 
 SLASH_COMMANDS["/testtable"] = function()
