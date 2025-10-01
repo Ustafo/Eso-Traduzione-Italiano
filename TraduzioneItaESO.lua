@@ -1012,17 +1012,46 @@ local function ColorizeEnglish(text)
     return ZO_ColorDef:New(addon.savedVars.bilingualColor or "FFFFFF"):Colorize(text)
 end
 
+-- Normalizza una stringa per il confronto
+local function NormalizeName(s)
+  if not s then return "" end
+  -- rimuove tag di colore e caratteri di controllo
+  s = s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+  -- rimuove suffissi in parentesi, es. "Nome (qualcosa)"
+  s = s:gsub("%s*%b()", "")
+  -- trim spazi iniziali/finali e converti a minuscolo
+  s = s:gsub("^%s+", ""):gsub("%s+$", "")
+  s = s:lower()
+  -- normalizza spazi multipli
+  s = s:gsub("%s+", " ")
+  return s
+end
+
 local function LoadTranslationTable()
     addon.translationTable = {}
     addon.reverseTable     = {}
     local count = 0
-    for itName, enName in pairs(addon.ZoneTranslations or {}) do
-        addon.translationTable[itName] = enName
-        addon.reverseTable[enName]     = itName
+    local zoneTranslations = addon.ZoneTranslations or {}
+    for name_it, name_en in pairs(zoneTranslations) do
+      if name_it and name_en then
+        local key = NormalizeName(name_it)
+        addon.translationTable[key] = name_en
+        addon.reverseTable[name_en] = name_it
         count = count + 1
-        d("[TraduzioneItaESO] Traduzione zona: " .. itName .. " -> " .. enName)
+        d("[TraduzioneItaESO] Traduzione zona: " .. tostring(name_it) .. " -> " .. tostring(name_en))
+      end
     end
     d("[TraduzioneItaESO] Caricate " .. count .. " traduzioni")
+    -- test
+    local testKeys = {"Santuario di Vivec", "Abbazia delle Lame", "Abbazia di Zenithar"}
+    for _, key in ipairs(testKeys) do
+      local nk = NormalizeName(key)
+      if addon.translationTable[nk] then
+        d("[TraduzioneItaESO] Test OK: " .. key .. " -> " .. addon.translationTable[nk])
+      else
+        d("[TraduzioneItaESO] Test FALLITO: Traduzione non trovata per " .. key)
+      end
+    end
 end
 
 local function SetLanguage(lang)
@@ -1052,7 +1081,7 @@ local function UpdateMapName()
     if mapName == "Tamriel" then
         mapName = GetUnitZone("player")
     end
-    local mapNameNoSuffix = mapName:gsub("%^%a+$", "")
+    local mapNameNoSuffix = NormalizeName(mapName)
     local englishName = addon.translationTable[mapNameNoSuffix]
     local newText = mapName
     if currentLang == "it" then
@@ -1072,8 +1101,8 @@ local function UpdateNPCName()
     if not addon.savedVars.bilingualNPCNames then return end
     local currentLang = GetCVar("language.2")
     local unitName = GetUnitName("interact")
-    local unitNoSuffix = unitName:gsub("%^%a+$", "")
-    local englishName = addon.translationTable[unitNoSuffix] or unitNoSuffix
+    local unitNoSuffix = NormalizeName(unitName)
+    local englishName = addon.translationTable[unitNoSuffix] or unitName
     local npcLabel = WINDOW_MANAGER:GetControlByName("TraduzioneItaESO_NPCNameLabel")
     if npcLabel then
         local newText = unitName
@@ -1138,16 +1167,16 @@ local function HookPoiTooltips()
     local function AddBilingualName(pin)
         if not addon.savedVars.bilingualPOI then return end
         local localizedName = ZO_WorldMapMouseoverName:GetText()
-        local localizedNoSuffix = localizedName:gsub("%^%a+$", "")
-        local englishName = addon.translationTable[localizedNoSuffix]
+        local normalized = NormalizeName(localizedName)
+        local englishName = addon.translationTable[normalized] or localizedName
         local locString = localizedName
         if englishName then
             locString = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", localizedName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> / <<2>>", localizedName, ColorizeEnglish(englishName))
         end
         ZO_WorldMapMouseoverName:SetText(locString)
         d("[TraduzioneItaESO] Bilingue applicato per POI: " .. locString)
-        if not englishName then
-            d("[TraduzioneItaESO] Traduzione non trovata per POI: " .. localizedNoSuffix .. " - Usato solo italiano")
+        if not addon.translationTable[normalized] then
+            d("[TraduzioneItaESO] Traduzione non trovata per POI: " .. normalized .. " - Usato fallback IT")
         end
     end
     local CreatorPOISeen = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_POI_SEEN].creator
@@ -1165,8 +1194,8 @@ local function HookShrineTooltips()
     local function AddEnglishToTooltip()
         if not addon.savedVars.bilingualPOI then return end
         local localized = ZO_WorldMapMouseoverName:GetText()
-        local baseName  = localized:gsub("%^%a+$", "")
-        local english   = addon.translationTable[baseName]
+        local normalized = NormalizeName(localized)
+        local english   = addon.translationTable[normalized] or localized
         local text      = localized
         if english then
             local fmt       = addon.savedVars.bilingualNewLine
@@ -1175,7 +1204,7 @@ local function HookShrineTooltips()
             text      = zo_strformat(fmt, localized, ColorizeEnglish(english))
             d("[TraduzioneItaESO] Nome inglese trovato per Shrine: " .. english .. " - Mostrato bilingue")
         else
-            d("[TraduzioneItaESO] Traduzione non trovata per Shrine: " .. baseName .. " - Mostrato solo italiano")
+            d("[TraduzioneItaESO] Traduzione non trovata per Shrine: " .. normalized .. " - Mostrato solo italiano")
         end
         ZO_WorldMapMouseoverName:SetText(text)
     end
@@ -1205,8 +1234,8 @@ local function HookKeepTooltips()
     local function ModifyKeepTooltip(self, keepId)
         if not addon.savedVars.bilingualPOI then return end
         local keepName = GetKeepName(keepId)
-        local keepNoSuffix = keepName:gsub("%^%a+$", "")
-        local englishKeepName = addon.translationTable[keepNoSuffix]
+        local normalized = NormalizeName(keepName)
+        local englishKeepName = addon.translationTable[normalized] or keepName
         local nameLabel = self:GetNamedChild("Name")
         local displayText = keepName
         if englishKeepName then
@@ -1214,8 +1243,8 @@ local function HookKeepTooltips()
         end
         nameLabel:SetText(displayText)
         d("[TraduzioneItaESO] Bilingue applicato per Keep: " .. displayText)
-        if not englishKeepName then
-            d("[TraduzioneItaESO] Traduzione non trovata per Keep: " .. keepNoSuffix .. " - Usato solo italiano")
+        if not addon.translationTable[normalized] then
+            d("[TraduzioneItaESO] Traduzione non trovata per Keep: " .. normalized .. " - Usato fallback IT")
         end
     end
     local SetKeep = ZO_KeepTooltip.SetKeep
