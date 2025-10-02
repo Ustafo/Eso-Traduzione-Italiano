@@ -769,15 +769,15 @@ do
     local englishName = location.name or ""
     -- reverseTable mappa English -> Italian (caricata in LoadTranslationTable)
     local italianName = TraduzioneItaESO.reverseTable and TraduzioneItaESO.reverseTable[englishName] or nil
-
+    local cleanedItalian = italianName and italianName:gsub("%^%a+", "") or nil
     -- Se l'utente ha abilitato i nomi bilingui, costruisci la stringa
-    if TraduzioneItaESO.savedVars and TraduzioneItaESO.savedVars.bilingualMapNames and italianName and italianName ~= "" then
+    if TraduzioneItaESO.savedVars and TraduzioneItaESO.savedVars.bilingualMapNames and cleanedItalian and cleanedItalian ~= "" and cleanedItalian ~= englishName then
         if TraduzioneItaESO.savedVars.bilingualNewLine then
             -- nuova linea: English \n Italian
-            blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName) .. "\n" .. italianName)
+            blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName) .. "\n" .. cleanedItalian)
         else
             -- parentesi: English (Italian)
-            blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName) .. " (" .. italianName .. ")")
+            blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName) .. " (" .. cleanedItalian .. ")")
         end
     else
         -- fallback: solo English (comportamento precedente)
@@ -801,12 +801,13 @@ end
 blob.city:SetFont(self.cityFont)
 local cityEnglish = location.cityName or ""
 local cityItalian = self.reverseTable[cityEnglish] or cityEnglish
-local cityText = currentLang == "it" and cityItalian or cityEnglish
+local cleanedCityItalian = cityItalian:gsub("%^%a+", "")
+local cityText = currentLang == "it" and cleanedCityItalian or cityEnglish
 if currentLang == "it" then
-if self.savedVars.bilingualMapNames and self.translationTable[cityItalian] then
-cityText = self.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cityItalian, ColorizeEnglish(self.translationTable[cityItalian])) or zo_strformat("<<1>> (<<2>>)", cityItalian, ColorizeEnglish(self.translationTable[cityItalian]))
+if self.savedVars.bilingualMapNames and self.translationTable[cleanedCityItalian] and cleanedCityItalian ~= self.translationTable[cleanedCityItalian] then
+cityText = self.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleanedCityItalian, ColorizeEnglish(self.translationTable[cleanedCityItalian])) or zo_strformat("<<1>> (<<2>>)", cleanedCityItalian, ColorizeEnglish(self.translationTable[cleanedCityItalian]))
 elseif self.savedVars.useEnglishNames then
-cityText = self.translationTable[cityItalian] or cityItalian
+cityText = self.translationTable[cleanedCityItalian] or cleanedCityItalian
 end
 end
 blob.city:SetText(ZO_CachedStrFormat("<<!AC:1>>", cityText))
@@ -975,6 +976,8 @@ local function NormalizeName(s)
   s = s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
   -- rimuove suffissi in parentesi, es. "Nome (qualcosa)"
   s = s:gsub("%s*%b()", "")
+  -- rimuove marcatori grammaticali ESO come ^m, ^f, ^md, ecc.
+  s = s:gsub("%^%a+", "")
   -- trim spazi iniziali/finali e converti a minuscolo
   s = s:gsub("^%s+", ""):gsub("%s+$", "")
   s = s:lower()
@@ -1035,12 +1038,13 @@ local function UpdateMapName()
     if mapName == "Tamriel" then
         mapName = GetUnitZone("player")
     end
+    local cleanedMapName = mapName:gsub("%^%a+", "")
     local mapNameNoSuffix = NormalizeName(mapName)
     local englishName = addon.translationTable[mapNameNoSuffix]
-    local newText = mapName
+    local newText = cleanedMapName
     if currentLang == "it" then
-        if addon.savedVars.bilingualMapNames and englishName then
-            newText = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", mapName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", mapName, ColorizeEnglish(englishName))
+        if addon.savedVars.bilingualMapNames and englishName and cleanedMapName ~= englishName then
+            newText = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleanedMapName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", cleanedMapName, ColorizeEnglish(englishName))
         elseif addon.savedVars.useEnglishNames and englishName then
             newText = englishName
         end
@@ -1055,13 +1059,14 @@ local function UpdateNPCName()
     if not addon.savedVars.bilingualNPCNames then return end
     local currentLang = GetCVar("language.2")
     local unitName = GetUnitName("interact")
+    local cleanedUnitName = unitName:gsub("%^%a+", "")
     local unitNoSuffix = NormalizeName(unitName)
-    local englishName = addon.translationTable[unitNoSuffix] or unitName
+    local englishName = addon.translationTable[unitNoSuffix] or cleanedUnitName
     local npcLabel = WINDOW_MANAGER:GetControlByName("TraduzioneItaESO_NPCNameLabel")
     if npcLabel then
-        local newText = unitName
+        local newText = cleanedUnitName
         if currentLang == "it" then
-            newText = string.format("%s / %s", unitName, englishName)
+            newText = string.format("%s / %s", cleanedUnitName, englishName)
         end
         npcLabel:SetText(newText)
     end
@@ -1121,11 +1126,12 @@ local function HookPoiTooltips()
     local function AddBilingualName(pin)
         if not addon.savedVars.bilingualPOI then return end
         local localizedName = ZO_WorldMapMouseoverName:GetText()
+        local cleanedLocalized = localizedName:gsub("%^%a+", "")
         local normalized = NormalizeName(localizedName)
-        local englishName = addon.translationTable[normalized] or localizedName
-        local locString = localizedName
-        if englishName then
-            locString = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", localizedName, ColorizeEnglish(englishName)) or zo_strformat("<<1>> / <<2>>", localizedName, ColorizeEnglish(englishName))
+        local englishName = addon.translationTable[normalized] or cleanedLocalized
+        local locString = cleanedLocalized
+        if englishName and cleanedLocalized ~= englishName then
+            locString = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleanedLocalized, ColorizeEnglish(englishName)) or zo_strformat("<<1>> / <<2>>", cleanedLocalized, ColorizeEnglish(englishName))
         end
         ZO_WorldMapMouseoverName:SetText(locString)
         d("[TraduzioneItaESO] Bilingue applicato per POI: " .. locString)
@@ -1148,16 +1154,15 @@ local function HookShrineTooltips()
     local function AddEnglishToTooltip()
         if not addon.savedVars.bilingualPOI then return end
         local localized = ZO_WorldMapMouseoverName:GetText()
+        local cleanedLocalized = localized:gsub("%^%a+", "")
         local normalized = NormalizeName(localized)
-        local english = addon.translationTable[normalized] or localized
-        local text = localized
-        if english then
+        local english = addon.translationTable[normalized] or cleanedLocalized
+        local text = cleanedLocalized
+        if english and cleanedLocalized ~= english then
             local fmt = addon.savedVars.bilingualNewLine
                               and "<<1>>\n<<2>>"
                               or "<<1>> (<<2>>)"
-            if not string.find(localized, english) then
-                text = zo_strformat(fmt, localized, ColorizeEnglish(english))
-            end
+            text = zo_strformat(fmt, cleanedLocalized, ColorizeEnglish(english))
             d("[TraduzioneItaESO] Nome inglese trovato per Shrine: " .. english .. " - Mostrato bilingue")
         else
             d("[TraduzioneItaESO] Traduzione non trovata per Shrine: " .. normalized .. " - Mostrato solo italiano")
@@ -1188,12 +1193,13 @@ local function HookKeepTooltips()
     local function ModifyKeepTooltip(self, keepId)
         if not addon.savedVars.bilingualPOI then return end
         local keepName = GetKeepName(keepId)
+        local cleanedKeepName = keepName:gsub("%^%a+", "")
         local normalized = NormalizeName(keepName)
-        local englishKeepName = addon.translationTable[normalized] or keepName
+        local englishKeepName = addon.translationTable[normalized] or cleanedKeepName
         local nameLabel = self:GetNamedChild("Name")
-        local displayText = keepName
-        if englishKeepName then
-            displayText = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", keepName, ColorizeEnglish(englishKeepName)) or zo_strformat("<<1>> / <<2>>", keepName, ColorizeEnglish(englishKeepName))
+        local displayText = cleanedKeepName
+        if englishKeepName and cleanedKeepName ~= englishKeepName then
+            displayText = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleanedKeepName, ColorizeEnglish(englishKeepName)) or zo_strformat("<<1>> / <<2>>", cleanedKeepName, ColorizeEnglish(englishKeepName))
         end
         nameLabel:SetText(displayText)
         d("[TraduzioneItaESO] Bilingue applicato per Keep: " .. displayText)
