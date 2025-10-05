@@ -1155,24 +1155,71 @@ local function RefreshUI()
     end
     UpdateUIVisibility(IsReticleHidden())
 end
+local function ForceSetMouseoverText(primaryText, secondaryText)
+    local function Compose()
+        if secondaryText and secondaryText ~= "" then
+            if addon.savedVars.bilingualNewLine then
+                return zo_strformat("<<1>>\n<<2>>", primaryText, ColorizeEnglish(secondaryText))
+            else
+                return zo_strformat("<<1>> (<<2>>)", primaryText, ColorizeEnglish(secondaryText))
+            end
+        end
+        return primaryText
+    end
+
+    local finalText = Compose()
+
+    if ZO_WorldMapMouseoverName and ZO_WorldMapMouseoverName.SetText then
+        ZO_WorldMapMouseoverName:SetText(finalText)
+    end
+
+    if ZO_WorldMapTooltip and ZO_WorldMapTooltip.SetText then
+        ZO_WorldMapTooltip:SetText(finalText)
+    end
+
+    zo_callLater(function()
+        if ZO_WorldMapMouseoverName and ZO_WorldMapMouseoverName.SetText then
+            ZO_WorldMapMouseoverName:SetText(finalText)
+        end
+        if ZO_WorldMapTooltip and ZO_WorldMapTooltip.SetText then
+            ZO_WorldMapTooltip:SetText(finalText)
+        end
+        if WORLD_MAP_FRAGMENT and WORLD_MAP_FRAGMENT:IsShowing() and ZO_WorldMap then
+            if ZO_WorldMap.RefreshMouseover then
+                ZO_WorldMap:RefreshMouseover()
+            elseif ZO_WorldMap_OnMouseMove then
+                ZO_WorldMap_OnMouseMove()
+            end
+        end
+    end, 0)
+end
+-- Helper per pulire e normalizzare nomi
+local function CleanAndNormalizeName(name)
+    if not name then return nil end
+    local s = name:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+    s = s:gsub("%s*%b()","")
+    s = s:match("^%s*(.-)%s*$") or s
+    return NormalizeName(s), s
+end
 local function HookPoiTooltips()
     local function AddBilingualName(pin)
         if not addon.savedVars.bilingualPOI then return end
         local poiIndex = pin:GetPOIIndex()
         local zoneIndex = pin:GetPOIZoneIndex()
-        if not poiIndex or not zoneIndex then return end  -- Aggiunto questo controllo per evitare errori su pin non-POI e prevenire che i nomi spariscano
+        if not poiIndex or not zoneIndex then return end
         local localizedName = GetPOIInfo(zoneIndex, poiIndex)  -- Nome localizzato dal gioco
-        local cleanedLocalized = localizedName and localizedName:gsub("%^%a+", "") or nil
-        local normalized = cleanedLocalized and NormalizeName(cleanedLocalized) or nil
-        local englishName = normalized and addon.translationTable[normalized] or cleanedLocalized
-        local locString = cleanedLocalized
-        if englishName and cleanedLocalized ~= englishName then
-            locString = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleanedLocalized, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", cleanedLocalized, ColorizeEnglish(englishName))
+        if not localizedName or localizedName == "" then return end
+        local normalized, cleaned = CleanAndNormalizeName(localizedName)
+        local englishName = addon.translationTable and addon.translationTable[normalized]
+        local italianFromReverse = addon.reverseTable and (addon.reverseTable[cleaned] or addon.reverseTable[normalized])
+        if englishName and cleaned ~= englishName then
+            ForceSetMouseoverText(cleaned, englishName)
+        elseif italianFromReverse and cleaned ~= italianFromReverse then
+            ForceSetMouseoverText(italianFromReverse, cleaned)
         end
-        ZO_WorldMapMouseoverName:SetText(locString)
     end
     
-    -- Lista di tipi di POI aggiuntivi da agganciare (includi quelli originali + extra)
+    -- Lista di tipi di POI estesa con tipi aggiuntivi per torri, boss, piantagioni, crafting
     local poiTypes = {
         MAP_PIN_TYPE_POI_SEEN,
         MAP_PIN_TYPE_POI_COMPLETE,
@@ -1192,6 +1239,40 @@ local function HookPoiTooltips()
         MAP_PIN_TYPE_LANDMARK,
         MAP_PIN_TYPE_MUNDUS_STONE_SET,
         MAP_PIN_TYPE_MUNDUS_STONE_UNSET,
+        -- Aggiunti per estendere a più POI
+        MAP_PIN_TYPE_QUEST_PIN,
+        MAP_PIN_TYPE_QUEST_PIN_COMPLETE,
+        MAP_PIN_TYPE_DUNGEON,
+        MAP_PIN_TYPE_PUBLIC_DUNGEON,
+        MAP_PIN_TYPE_DELVE,
+        MAP_PIN_TYPE_FARM,
+        MAP_PIN_TYPE_STABLE,
+        MAP_PIN_TYPE_INN,
+        MAP_PIN_TYPE_TRIAL,
+        MAP_PIN_TYPE_BATTLEGROUND,
+        -- Aggiunti specifici per richiesta utente
+        MAP_PIN_TYPE_GROUP_BOSS,  -- Boss con teschio (world bosses)
+        MAP_PIN_TYPE_KEEP,        -- Torri e keeps
+        MAP_PIN_TYPE_ARTIFACT_KEEP,
+        MAP_PIN_TYPE_BORDER_KEEP_ALDMERI,  -- Esempi per torri/border keeps
+        MAP_PIN_TYPE_BORDER_KEEP_EBONHEART,
+        MAP_PIN_TYPE_BORDER_KEEP_DAGGERFALL,
+        MAP_PIN_TYPE_DAEDRIC_KEEP_ALDMERI, -- Keeps daedrici
+        MAP_PIN_TYPE_DAEDRIC_KEEP_EBONHEART,
+        MAP_PIN_TYPE_DAEDRIC_KEEP_DAGGERFALL,
+        MAP_PIN_TYPE_AVA_TOWN_NEUTRAL,     -- Città in Cyrodiil
+        MAP_PIN_TYPE_AVA_TOWN_ALDMERI,
+        MAP_PIN_TYPE_AVA_TOWN_EBONHEART,
+        MAP_PIN_TYPE_AVA_TOWN_DAGGERFALL,
+        MAP_PIN_TYPE_DELVE_NEUTRAL,        -- Delve neutrali
+        MAP_PIN_TYPE_DELVE_ALDMERI,
+        MAP_PIN_TYPE_DELVE_EBONHEART,
+        MAP_PIN_TYPE_DELVE_DAGGERFALL,
+        MAP_PIN_TYPE_GROUP_KEEP,           -- Keeps di gruppo
+        MAP_PIN_TYPE_GROUP_DELVE,          -- Delve di gruppo
+        MAP_PIN_TYPE_GROUP_BOSS,           -- Boss di gruppo
+        MAP_PIN_TYPE_GROUP_EVENT,          -- Eventi di gruppo
+        MAP_PIN_TYPE_GROUP_POI,            -- POI di gruppo
     }
     
     -- Aggancia i creator per ciascun tipo
@@ -1206,31 +1287,29 @@ local function HookPoiTooltips()
     end
 end
 local function HookShrineTooltips()
-    local function AddEnglishToTooltip(pin)
+    local function AddBilingualName(pin)
         if not addon.savedVars.bilingualPOI then return end
         local nodeIndex = pin:GetFastTravelNodeIndex()
         local _, localized = GetFastTravelNodeInfo(nodeIndex)
-        local cleanedLocalized = localized and localized:gsub("%^%a+", "") or nil
-        local normalized = cleanedLocalized and NormalizeName(cleanedLocalized) or nil
-        local english = normalized and addon.translationTable[normalized] or cleanedLocalized
-        local text = cleanedLocalized
-        if english and cleanedLocalized ~= english then
-            local fmt = addon.savedVars.bilingualNewLine
-                              and "<<1>>\n<<2>>"
-                              or "<<1>> (<<2>>)"
-            text = zo_strformat(fmt, cleanedLocalized, ColorizeEnglish(english))
+        if not localized or localized == "" then return end
+        local normalized, cleaned = CleanAndNormalizeName(localized)
+        local englishName = addon.translationTable and addon.translationTable[normalized]
+        local italianFromReverse = addon.reverseTable and (addon.reverseTable[cleaned] or addon.reverseTable[normalized])
+        if englishName and cleaned ~= englishName then
+            ForceSetMouseoverText(cleaned, englishName)
+        elseif italianFromReverse and cleaned ~= italianFromReverse then
+            ForceSetMouseoverText(italianFromReverse, cleaned)
         end
-        ZO_WorldMapMouseoverName:SetText(text)
     end
     local orig1 = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE].creator
     ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE].creator = function(pin, ...)
         orig1(pin, ...)
-        AddEnglishToTooltip(pin)
+        AddBilingualName(pin)
     end
     local orig2 = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE_CURRENT_LOC].creator
     ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE_CURRENT_LOC].creator = function(pin, ...)
         orig2(pin, ...)
-        AddEnglishToTooltip(pin)
+        AddBilingualName(pin)
     end
 end
 local function HookHouseTooltips()
@@ -1238,18 +1317,17 @@ local function HookHouseTooltips()
         local origHouse = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_HOUSE].creator
         ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_HOUSE].creator = function(pin, ...)
             origHouse(pin, ...)
+            if not addon.savedVars.bilingualPOI then return end
             local localized = pin:GetHouseName()
-            local cleanedLocalized = localized and localized:gsub("%^%a+", "") or nil
-            local normalized = cleanedLocalized and NormalizeName(cleanedLocalized) or nil
-            local english = normalized and addon.translationTable[normalized] or cleanedLocalized
-            local text = cleanedLocalized
-            if english and cleanedLocalized ~= english then
-                local fmt = addon.savedVars.bilingualNewLine
-                                  and "<<1>>\n<<2>>"
-                                  or "<<1>> (<<2>>)"
-                text = zo_strformat(fmt, cleanedLocalized, ColorizeEnglish(english))
+            if not localized or localized == "" then return end
+            local normalized, cleaned = CleanAndNormalizeName(localized)
+            local englishName = addon.translationTable and addon.translationTable[normalized]
+            local italianFromReverse = addon.reverseTable and (addon.reverseTable[cleaned] or addon.reverseTable[normalized])
+            if englishName and cleaned ~= englishName then
+                ForceSetMouseoverText(cleaned, englishName)
+            elseif italianFromReverse and cleaned ~= italianFromReverse then
+                ForceSetMouseoverText(italianFromReverse, cleaned)
             end
-            ZO_WorldMapMouseoverName:SetText(text)
         end
     end
 end
@@ -1258,18 +1336,17 @@ local function HookGroupDungeonTooltips()
         local origGroupDungeon = ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_GROUP_DUNGEON].creator
         ZO_MapPin.TOOLTIP_CREATORS[MAP_PIN_TYPE_GROUP_DUNGEON].creator = function(pin, ...)
             origGroupDungeon(pin, ...)
+            if not addon.savedVars.bilingualPOI then return end
             local localized = pin:GetPOIName() or pin:GetGroupDungeonName()  -- Usa appropriato
-            local cleanedLocalized = localized and localized:gsub("%^%a+", "") or nil
-            local normalized = cleanedLocalized and NormalizeName(cleanedLocalized) or nil
-            local english = normalized and addon.translationTable[normalized] or cleanedLocalized
-            local text = cleanedLocalized
-            if english and cleanedLocalized ~= english then
-                local fmt = addon.savedVars.bilingualNewLine
-                                  and "<<1>>\n<<2>>"
-                                  or "<<1>> (<<2>>)"
-                text = zo_strformat(fmt, cleanedLocalized, ColorizeEnglish(english))
+            if not localized or localized == "" then return end
+            local normalized, cleaned = CleanAndNormalizeName(localized)
+            local englishName = addon.translationTable and addon.translationTable[normalized]
+            local italianFromReverse = addon.reverseTable and (addon.reverseTable[cleaned] or addon.reverseTable[normalized])
+            if englishName and cleaned ~= englishName then
+                ForceSetMouseoverText(cleaned, englishName)
+            elseif italianFromReverse and cleaned ~= italianFromReverse then
+                ForceSetMouseoverText(italianFromReverse, cleaned)
             end
-            ZO_WorldMapMouseoverName:SetText(text)
         end
     end
 end
@@ -1284,13 +1361,15 @@ local function HookKeepTooltips()
     local function ModifyKeepTooltip(self, keepId)
         if not addon.savedVars.bilingualPOI then return end
         local keepName = GetKeepName(keepId)
-        local cleanedKeepName = keepName:gsub("%^%a+", "")
-        local normalized = NormalizeName(cleanedKeepName)
-        local englishKeepName = addon.translationTable[normalized] or cleanedKeepName
+        local normalized, cleaned = CleanAndNormalizeName(keepName)
+        local englishName = addon.translationTable and addon.translationTable[normalized]
+        local italianFromReverse = addon.reverseTable and (addon.reverseTable[cleaned] or addon.reverseTable[normalized])
         local nameLabel = self:GetNamedChild("Name")
-        local displayText = cleanedKeepName
-        if englishKeepName and cleanedKeepName ~= englishKeepName then
-            displayText = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleanedKeepName, ColorizeEnglish(englishKeepName)) or zo_strformat("<<1>> (<<2>>)", cleanedKeepName, ColorizeEnglish(englishKeepName))
+        local displayText = cleaned
+        if englishName and cleaned ~= englishName then
+            displayText = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleaned, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", cleaned, ColorizeEnglish(englishName))
+        elseif italianFromReverse and cleaned ~= italianFromReverse then
+            displayText = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", italianFromReverse, ColorizeEnglish(cleaned)) or zo_strformat("<<1>> (<<2>>)", italianFromReverse, ColorizeEnglish(cleaned))
         end
         nameLabel:SetText(displayText)
     end
@@ -1311,12 +1390,14 @@ local function HookFastTravelDialog()
     local origFastTravel = FastTravelToNodeConfirmation
     FastTravelToNodeConfirmation = function(nodeIndex)
         local _, localizedName, _, _, _, _, cost = GetFastTravelNodeInfo(nodeIndex)
-        local cleanedLocalized = localizedName:gsub("%^%a+", "")
-        local normalized = NormalizeName(cleanedLocalized)
-        local englishName = addon.translationTable[normalized] or cleanedLocalized
-        local bilingueName = cleanedLocalized
-        if englishName and cleanedLocalized ~= englishName then
-            bilingueName = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleanedLocalized, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", cleanedLocalized, ColorizeEnglish(englishName))
+        local normalized, cleaned = CleanAndNormalizeName(localizedName)
+        local englishName = addon.translationTable and addon.translationTable[normalized]
+        local italianFromReverse = addon.reverseTable and (addon.reverseTable[cleaned] or addon.reverseTable[normalized])
+        local bilingueName = cleaned
+        if englishName and cleaned ~= englishName then
+            bilingueName = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleaned, ColorizeEnglish(englishName)) or zo_strformat("<<1>> (<<2>>)", cleaned, ColorizeEnglish(englishName))
+        elseif italianFromReverse and cleaned ~= italianFromReverse then
+            bilingueName = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", italianFromReverse, ColorizeEnglish(cleaned)) or zo_strformat("<<1>> (<<2>>)", italianFromReverse, ColorizeEnglish(cleaned))
         end
         ZO_Dialogs_ShowDialog("FAST_TRAVEL_CONFIRM", {nodeIndex = nodeIndex}, {mainTextParams = {bilingueName, cost}})
     end
