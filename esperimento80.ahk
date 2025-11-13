@@ -3777,24 +3777,32 @@ NormalizeMarkerInString(str) {
     if (str = "")
         return str
     new := str
-    ; trova marcatori ^xxxx di 1-4 lettere e normalizza
     pos := 1
+    ; cerca tutte le occorrenze ^LETTERE (1-4)
     while RegExMatch(new, "\^([A-Za-z]{1,4})\b", m, pos) {
-        full := m0 := SubStr(new, m.Pos, StrLen(m.Value))
-        tempMarker := SubStr(full, 2)
-        StringLower, marker, tempMarker
-        repl := "^" . ( markerMap[marker] ? markerMap[marker] : marker )
-        ; sostituisci occorrenza trovata (m.Pos, m.Value.Length)
-        new := SubStr(new, 1, m.Pos-1) . repl . SubStr(new, m.Pos + StrLen(m.Value))
+        orig := SubStr(new, m.Pos, StrLen(m.Value)) ; es. "^FM" o "^m"
+        found := m1 := m1 := m1 := "" ; azzera eventuali residui (compatibilità AHK)
+        ; m[1] contiene il gruppo di lettere
+        tempMarker := m1 := m.Value
+        ; normalizza a minuscolo
+        StringLower, lowerMarker, m1
+        ; se esiste una mappatura la prendo, altrimenti uso la versione minuscola
+        replMarker := (markerMap.HasKey(lowerMarker) ? markerMap[lowerMarker] : lowerMarker)
+        repl := "^" . replMarker
+        ; ricostruisci la nuova stringa sostituendo solo la porzione trovata
+        new := SubStr(new, 1, m.Pos - 1) . repl . SubStr(new, m.Pos + StrLen(m.Value))
+        ; rilancio la ricerca subito dopo la sostituzione per evitare loop infinito
         pos := m.Pos + StrLen(repl)
     }
     return new
 }
 ExtractMarkerFromString(str) {
     if RegExMatch(str, "\^([A-Za-z]{1,4})\b", m) {
-        tempM1 := m1
-        StringLower, lowerM1, tempM1
-        return "^" . lowerM1
+        ; m1 è il gruppo di lettere
+        temp := m1 := m1 := "" ; azzera
+        temp := m1 := m.Value
+        StringLower, lower, m1
+        return "^" . lower
     }
     return ""
 }
