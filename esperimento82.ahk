@@ -3687,6 +3687,7 @@ RemoveCsvHeader(ByRef arr)
 
 ; … (definizione del tray menu, variabili globali, ecc.) …
 
+
 preparafile:
 ;————————————————————————————
 ; FASE 1/5 – Selezione file
@@ -3870,21 +3871,17 @@ for i, row in dataNew {
         } else {
             ; No marker in italiano, aggiungi chosen
             newMarker := hasEnMarker ? chosen : ("^i" . SubStr(chosen, 2))
-            stripped := Trim(itNormalized)
+            itStrip := RegExReplace(itNormalized, "\^[A-Za-z]{1,4}\s*$", "")
+            stripped := Trim(itStrip)
             if (stripped != "") {
-                itNormalized := RTrim(itNormalized) . newMarker
+                itNormalized := RTrim(itStrip) . newMarker
             } else {
-                strippedEn := Trim(enText)
-                if (strippedEn != "") {
-                    itNormalized := strippedEn . newMarker
-                } else {
-                    itNormalized := ""
-                }
+                itNormalized := enText . newMarker
             }
         }
         ; Log correzione se modificato
         if (itNormalized != itRaw) {
-            corrRow := """" . var1 . """,""" . var2 . """,""" . var3 . """,""" . var4 . """,""" . itNormalized . """`n"
+            corrRow := FormatCsvRow(row[1], row[2], row[3], row[4], itNormalized)
             corrContent .= corrRow
         }
     }
@@ -3999,6 +3996,7 @@ Tooltip, Fase 4/5: Inizio merge-join..., 0, 0
 output := ""
 logContent := ""
 corrContent := ""
+toTranslateContent := ""
 contotltip := 0
 outputCount := 0
 iOld := 1
@@ -4192,18 +4190,13 @@ if (varconfronto <> "") {
         }
         ; Applica il nuovo marker
         if (strippedNoMarker = "") {
-            strippedEn := Trim(enText)
-            if (strippedEn != "") {
-                itNormalized := strippedEn . newMarker
-            } else {
-                itNormalized := ""
-            }
+            itNormalized := enText . newMarker
         } else {
             itNormalized := RTrim(itStrip) . newMarker
         }
         ; Log se modificato
         if (itNormalized != textItOrig) {
-            corrRow := """" . var1 . """,""" . var2 . """,""" . var3 . """,""" . var4 . """,""" . itNormalized . """`n"
+            corrRow := FormatCsvRow(var1, var2, var3, var4, itNormalized)
             corrContent .= corrRow
         }
     }
@@ -4625,22 +4618,18 @@ EndFixed:
         if (!anyFixed && !hasValid) {
             debugMsg .= "NESSUN MATCH e NON VALIDO (non fixabile) - Usa inglese`n"
             textIt := textEng
-            rowToTranslate := """" . var1 . """,""" . var2 . """,""" . var3 . """,""" . var4 . """,""" . textEng . """`n"
-            toTranslateContent .= rowToTranslate
-            origRow := """" . var1 . """,""" . var2 . """,""" . var3 . """,""" . var4 . """,""" . textItOrig . """`n"
-            toTranslateContent .= origRow
+            toTranslateContent .= FormatCsvRow(var1, var2, var3, var4, textEng)
+            toTranslateContent .= FormatCsvRow(var1, var2, var3, var4, textItOrig)
         } else if (!match && hasValid) {
             debugMsg .= "NESSUN MATCH ma VALIDO SECONDO LOGICA - Usa italiano`n"
             if (!expandToTranslate && !anyFixed) {
-                rowToTranslate := """" . var1 . """,""" . var2 . """,""" . var3 . """,""" . var4 . """,""" . textEng . """`n"
-                toTranslateContent .= rowToTranslate
-                origRow := """" . var1 . """,""" . var2 . """,""" . var3 . """,""" . var4 . """,""" . textItOrig . """`n"
-                toTranslateContent .= origRow
+                toTranslateContent .= FormatCsvRow(var1, var2, var3, var4, textEng)
+                toTranslateContent .= FormatCsvRow(var1, var2, var3, var4, textItOrig)
             }
         } else {
             debugMsg .= "MATCH CONFERMATO - Usa italiano`n"
         }
-        debugMsg .= "Riga italiana originale: """ . var1 . """,""" . var2 . """,""" . var3 . """,""" . var4 . """,""" . textItOrig . """`n"
+        debugMsg .= "Riga italiana originale: " textItOrig "`n"
         logContent .= "Mismatch virgolette per chiave " . key . ":`n" . debugMsg . "`n"
     } else {
         debugMsg .= "MATCH CONFERMATO - Usa italiano`n"
@@ -4704,15 +4693,10 @@ if (preparatestopergioco) {
     var5chesost := StrReplace(var5chesost, "Bloodroot Forge", "Forgia delle radici sanguinanti - Bloodroot Forge")
     var5 := var5chesost
 }
-; Escaping standard CSV
-;var5 := StrReplace(var5, """", """""")
-v = "
-v1 = ","
-rowLine := v . var1 . v1 . var2 . v1 . var3 . v1 . var4 . v1 . var5 . v "`n"
-output .= rowLine
+; Costruisci la riga output usando FormatCsvRow
+output .= FormatCsvRow(var1, var2, var3, var4, var5)
 if (anyFixed) {
-    corrRow := v . var1 . v1 . var2 . v1 . var3 . v1 . var4 . v1 . var5 . v "`n"
-    corrContent .= corrRow
+    corrContent .= FormatCsvRow(var1, var2, var3, var4, var5)
 }
 if (debugLimit > 0 && mismatchCount >= debugLimit) {
     goto SaveAndExit
@@ -4955,4 +4939,18 @@ ExtractMarkerFromString(str) {
         return "^" . lowerM1
     }
     return ""
+}
+
+
+; ----------------------------------------------------------
+; EscapeCsv: raddoppia le virgolette interne secondo RFC CSV
+; Se il campo è vuoto restituisce stringa vuota (ma comunque verrà quotata)
+; ----------------------------------------------------------
+EscapeCsv(s)
+{
+    if (s = "")
+        return ""
+    ; raddoppia " in ""
+    s := StrReplace(s, """", """""")
+    return s
 }
