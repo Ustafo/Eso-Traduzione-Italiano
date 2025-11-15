@@ -928,21 +928,30 @@ function addon:RenderMap(isTamriel)
                         local englishName = location.name or ""
                         -- reverseTable mappa English -> Italian (caricata in LoadTranslationTable)
                         local italianName = TraduzioneItaESO.reverseTable and TraduzioneItaESO.reverseTable[englishName] or nil
-                        local cleanedItalian = italianName and italianName:gsub("%^%a+", "") or nil
-                        -- Se l'utente ha abilitato i nomi bilingui, costruisci la stringa
-                        if TraduzioneItaESO.savedVars and TraduzioneItaESO.savedVars.bilingualMapNames and cleanedItalian and cleanedItalian ~= "" and cleanedItalian ~= englishName then
-                            if TraduzioneItaESO.savedVars.bilingualNewLine then
-                                -- nuova linea: English \n Italian
-                                blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName) .. "\n" .. cleanedItalian)
-                            else
-                                -- parentesi: English (Italian)
-                                blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName) .. " (" .. cleanedItalian .. ")")
-                            end
-                        else
-                            -- fallback: solo English (comportamento precedente)
-                            blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName))
-                        end
-                    end
+                        
+						
+						
+						
+local cleanedItalian = italianName and italianName or nil
+if cleanedItalian then
+    cleanedItalian = ProcessMarkers(cleanedItalian)
+    -- rimuovi eventuali marcatori residui non desiderati (se vuoi)
+    cleanedItalian = cleanedItalian:gsub("%^%a+", "")
+end
+if TraduzioneItaESO.savedVars.bilingualMapNames and cleanedItalian and cleanedItalian ~= englishName then
+    if TraduzioneItaESO.savedVars.bilingualNewLine then
+        blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName) .. "\n" .. cleanedItalian)
+    else
+        blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName) .. " (" .. cleanedItalian .. ")")
+    end
+else
+    blob.label:SetText(ZO_CachedStrFormat(SI_WORLD_MAP_LOCATION_NAME, englishName))
+end
+                   
+
+
+
+				   end
                     blob.label:SetHidden(not showLocations)
                     if showLocations then
                         local locXN, locYN = NormalizedLabelDataToUI(location.labelX, location.labelY)
@@ -1153,8 +1162,16 @@ local function NormalizeName(s)
   s = s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
   -- rimuove suffissi in parentesi, es. "Nome (qualcosa)"
   s = s:gsub("%s*%b()", "")
-  -- rimuove marcatori grammaticali ESO come ^m, ^f, ^md, ecc.
-  s = s:gsub("%^%a+", "")
+  
+  
+-- preserva marcatori personalizzati che iniziano con ^i... temporaneamente,
+-- poi rimuove gli altri marcatori e ripristina i ^i...
+s = s:gsub("%^i([%a%d_%-]+)", "||ITA_MARKER_%1||") -- salva marcatori ^i...
+s = s:gsub("%^[%a%d_%-]+", "")                     -- rimuove gli altri marcatori
+s = s:gsub("||ITA_MARKER_([%a%d_%-]+)||", "^i%1") -- ripristina i marcatori ^i...
+  
+  
+  
   -- trim spazi iniziali/finali e converti a minuscolo
   s = s:gsub("^%s+", ""):gsub("%s+$", "")
   s = s:lower()
@@ -1162,6 +1179,7 @@ local function NormalizeName(s)
   s = s:gsub("%s+", " ")
   return s
 end
+
 
 
 -- ItalianContraction: ritorna contrazione e articolo, es. "della","la"
@@ -1238,34 +1256,19 @@ local function ItalianContraction(marker, noun)
     return contraction, article
 end
 
--- ProcessMarkers: trova marcatori ^i... e sostituisce " di ^i..." con la contrazione corretta
+-- ProcessMarkers: trova marcatori ^i... e, se preceduti da " di ", li sostituisce con la contrazione corretta
 local function ProcessMarkers(name)
     if not name or name == "" then return name end
-
-    -- work on a copy
     local s = tostring(name)
-
-    -- per ogni occorrenza di ^i... (anche multiple), gestiamo separatamente
     local startPos = 1
     while true do
         local si, ei, marker = s:find("%^i([%a%d_%-]+)", startPos)
         if not si then break end
-
         local markerLower = marker:lower()
-        -- cerchiamo se prima del marcatore esiste " di " (spazio-di-spazio) - ignoriamo maiuscole
-        -- consideriamo anche casi con virgola o parentesi prima: cerchiamo l'ultima occorrenza di " di " prima di si
         local prefix = s:sub(1, si-1)
-        local di_pos = nil
-        -- ricerca semplice da destra verso sinistra
-        local search_from = #prefix
-        while search_from > 0 do
-            local p1, p2 = prefix:lower():find("%sdi%s", search_from - 50 < 1 and 1 or search_from - 50, true)
-            -- la find con true non accetta pattern, quindi usiamo match inverso:
-            break
-        end
-        -- implementazione pratica: cerchiamo l'ultima occorrenza con pattern plain " di " (case-insensitive)
-        local last_di_start, last_di_end = nil, nil
         local lower_prefix = prefix:lower()
+        -- trova ultima occorrenza di " di " (plain) nel prefix
+        local last_di_start, last_di_end = nil, nil
         local si_di = 1
         while true do
             local a, b = lower_prefix:find(" di ", si_di, true)
@@ -1273,47 +1276,33 @@ local function ProcessMarkers(name)
             last_di_start, last_di_end = a, b
             si_di = b + 1
         end
-
         if last_di_start then
-            -- abbiamo " ... di ^i..."; prendiamo la porzione dopo il marcatore come rest
             local rest = s:sub(ei+1)
-            -- per decidere la contrazione serviamo la parola che segue "di" o la parola principale del nome:
-            -- estraiamo il gruppo di parole dopo " di " fino al marcatore (se presenti) - fallback: prendiamo la parola successiva nel 'rest'
             local noun_context = rest:match("^%s*([%z\1-\127\194-\244][\128-\191%w%p%-]*)") or rest:match("^%s*(%w+)") or ""
             if noun_context == "" then
-                -- se non c'è contesto, proviamo la parola immediatamente prima di " di "
                 noun_context = prefix:sub(1, last_di_start-1):match("(%S+)%s*$") or ""
             end
-
             local contraction, article = ItalianContraction(markerLower, noun_context)
             if contraction then
-                -- sostituiamo " di ^i..." con " " .. contraction .. " " e poi rest (attenzione agli apostrofi)
-                -- se contraction finisce con apostrofo (dell') e rest inizia con vocale, non aggiungiamo spazio
                 local replacement = contraction
                 local rest_trim = rest:gsub("^%s+", "")
                 if replacement:sub(-1) == "'" then
-                    -- unisci direttamente, evitando doppio apostrofo o spazio
                     s = prefix:sub(1, last_di_start-1) .. replacement .. rest_trim
                 else
                     s = prefix:sub(1, last_di_start-1) .. replacement .. (rest_trim ~= "" and (" " .. rest_trim) or "")
                 end
-                -- ripartiamo la scansione dopo la posizione appena modificata
-                startPos = last_di_start + #replacement + 1
+                startPos = (last_di_start or 1) + #replacement + 1
             else
-                -- fallback: rimuovo solo la 'i' dal marcatore e proseguo
                 s = s:sub(1, si) .. markerLower .. s:sub(ei+1)
                 startPos = si + #markerLower + 1
             end
         else
-            -- nessun " di " trovata prima del marcatore: fallback semplice -> rimuovo la 'i' (lascio ^fd)
             s = s:sub(1, si) .. markerLower .. s:sub(ei+1)
             startPos = si + #markerLower + 1
         end
     end
-
     return s
 end
-
 
 
 
@@ -1414,10 +1403,15 @@ local function HookPoiTooltips()
     local function AddBilingualName(pin)
         if not addon.savedVars.bilingualPOI then return end
         local localizedName = ZO_WorldMapMouseoverName:GetText()
-        local cleanedLocalized = localizedName:gsub("%^%a+", "")
-        local normalized = NormalizeName(localizedName)
-        local englishName = addon.translationTable[normalized] or cleanedLocalized
-        local locString = cleanedLocalized
+		
+local cleanedLocalized = ProcessMarkers(localizedName)
+-- se vuoi rimuovere marcatori residui visuali (ma ProcessMarkers sostituisce " di ^i..." con contrazioni)
+cleanedLocalized = cleanedLocalized:gsub("%^%a+", "")
+local normalized = NormalizeName(localizedName)
+local englishName = addon.translationTable[normalized] or cleanedLocalized
+
+		
+		local locString = cleanedLocalized
         if englishName and cleanedLocalized ~= englishName then
             locString = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleanedLocalized, ColorizeEnglish(englishName)) or zo_strformat("<<1>> / <<2>>", cleanedLocalized, ColorizeEnglish(englishName))
         end
@@ -1501,16 +1495,38 @@ local function HookKeepTooltips()
 end
 
 local function GetBilingualText(originalText)
-    if not addon.savedVars.bilingualPOI or not originalText or originalText == "" then return originalText end
-    if string.find(originalText, "|c") then return originalText end  -- già bilingue/colorato
-    local cleaned = originalText:gsub("%^%a+", "")
+    if not addon.savedVars.bilingualPOI or not originalText or originalText == "" then
+        return originalText
+    end
+
+    -- non processiamo stringhe già bilingue/colorate
+    if string.find(originalText, "|c") then
+        return originalText
+    end
+
+    -- per la lookup usiamo NormalizeName sul testo originale (preserva i marcatori ^i...)
     local normalized = NormalizeName(originalText)
-    local englishName = addon.translationTable[normalized] or cleaned
-    if englishName == cleaned then return originalText end
+
+    -- fallback englishName: se non c'è traduzione, usiamo il testo senza marcatori
+    local cleanedForLookup = originalText:gsub("%^%a+", "")
+    local englishName = addon.translationTable[normalized] or cleanedForLookup
+
+    -- se non c'è traduzione effettiva, manteniamo il comportamento originale
+    if englishName == cleanedForLookup then
+        return originalText
+    end
+
+    -- Prepariamo la stringa mostrata: ProcessMarkers su originalText e poi rimozione residua dei marcatori
+    local cleaned = ProcessMarkers(originalText)
+    cleaned = cleaned and cleaned:gsub("%^%a+", "") or originalText
+
+    -- formattazione bilingue (nuova riga o parentesi)
     local fmt = addon.savedVars.bilingualNewLine and "<<1>>\n<<2>>" or "<<1>> (<<2>>)"
     local newText = zo_strformat(fmt, cleaned, ColorizeEnglish(englishName))
+
     return newText
 end
+
 
 local function TryHookSetText()
     if not ZO_WorldMapMouseoverName or not ZO_WorldMapMouseoverName.SetText then
