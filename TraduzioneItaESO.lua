@@ -968,8 +968,12 @@ end
                     end
                     blob.city:SetFont(self.cityFont)
                     local cityEnglish = location.cityName or ""
-                    local cityItalian = self.reverseTable[cityEnglish] or cityEnglish
-                    local cleanedCityItalian = cityItalian:gsub("%^%a+", "")
+					
+local cityItalian = self.reverseTable[cityEnglish] or cityEnglish
+local cleanedCityItalian = ProcessMarkers(cityItalian)
+cleanedCityItalian = cleanedCityItalian and cleanedCityItalian:gsub("%^%a+", "") or cityItalian
+
+					
                     local cityText = currentLang == "it" and cleanedCityItalian or cityEnglish
                     if currentLang == "it" then
                         if self.savedVars.bilingualMapNames and self.translationTable[cleanedCityItalian] and cleanedCityItalian ~= self.translationTable[cleanedCityItalian] then
@@ -1342,8 +1346,14 @@ end
 local function UpdateNPCName()
     if not addon.savedVars.bilingualNPCNames then return end
     local currentLang = GetCVar("language.2")
-    local unitName = GetUnitName("interact")
-    local cleanedUnitName = unitName:gsub("%^%a+", "")
+	
+	
+local unitName = GetUnitName("interact")
+local cleanedUnitName = ProcessMarkers(unitName)
+cleanedUnitName = cleanedUnitName and cleanedUnitName:gsub("%^%a+", "") or unitName
+
+	
+	
     local unitNoSuffix = NormalizeName(unitName)
     local englishName = addon.translationTable[unitNoSuffix] or cleanedUnitName
     local npcLabel = WINDOW_MANAGER:GetControlByName("TraduzioneItaESO_NPCNameLabel")
@@ -1432,8 +1442,14 @@ end
 local function HookShrineTooltips()
     local function AddEnglishToTooltip()
         if not addon.savedVars.bilingualPOI then return end
-        local localized = ZO_WorldMapMouseoverName:GetText()
-        local cleanedLocalized = localized:gsub("%^%a+", "")
+       
+local localized = ZO_WorldMapMouseoverName:GetText()
+local cleanedLocalized = ProcessMarkers(localized)
+cleanedLocalized = cleanedLocalized and cleanedLocalized:gsub("%^%a+", "") or localized
+
+		
+		
+		
         local normalized = NormalizeName(localized)
         local english = addon.translationTable[normalized] or cleanedLocalized
         local text = cleanedLocalized
@@ -1469,8 +1485,15 @@ local function HookKeepTooltips()
     end
     local function ModifyKeepTooltip(self, keepId)
         if not addon.savedVars.bilingualPOI then return end
-        local keepName = GetKeepName(keepId)
-        local cleanedKeepName = keepName:gsub("%^%a+", "")
+		
+		
+local keepName = GetKeepName(keepId)
+local cleanedKeepName = ProcessMarkers(keepName)
+cleanedKeepName = cleanedKeepName and cleanedKeepName:gsub("%^%a+", "") or keepName
+
+		
+		
+		
         local normalized = NormalizeName(keepName)
         local englishKeepName = addon.translationTable[normalized] or cleanedKeepName
         local nameLabel = self:GetNamedChild("Name")
