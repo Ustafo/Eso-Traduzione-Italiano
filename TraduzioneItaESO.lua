@@ -2,9 +2,11 @@
 -- Include integrazione con parti da Votan's Tamriel Map come nel contesto originale.
 -- Ho assemblato tutto dal contesto della conversazione, inclusi fix per fallback "italiano / italiano" e debug.
 -- Per verificare caricamento: Usa /script d(TraduzioneItaESO.ZoneTranslations["Santuario di Vivec"]) in chat ESO.
+
 -- 1) assicuriamoci che esista già la tabella globale
 TraduzioneItaESO = TraduzioneItaESO or {}
 local addon = TraduzioneItaESO
+
 -- FIX 1: Disabilita completamente gli errori per questo addon
 local function SafeCall(func, ...)
     local success, result = pcall(func, ...)
@@ -14,15 +16,18 @@ local function SafeCall(func, ...)
     end
     return result
 end
+
 -- Sostituisci le funzioni problematiche con versioni sicure
 local original_RenderMap = addon.RenderMap
 addon.RenderMap = function(self, isTamriel)
     SafeCall(original_RenderMap, self, isTamriel)
 end
+
 -- Disabilita anche altri handler che potrebbero causare errori
 local function SafeEventHandler(eventCode, ...)
     SafeCall(UpdateMapName)
 end
+
 -- 2) Ri-assegna tutti i campi
 addon.name = "TraduzioneItaESO"
 addon.displayName = "Traduzione Italiana ESO"
@@ -30,6 +35,7 @@ addon.version = "1.0"
 addon.pinType = "TraduzioneItaESOTamrielMapPinType"
 -- addon.mapPinLayer = MAP_PIN_LAYER_WORLD_MAP_GUILD_WAYSHRINES
 addon.mapPinSnapToPins = false
+
 addon.locations = {
 [1] = {
 name = "Tamriel",
@@ -397,15 +403,18 @@ alliance = 999,
 poi = 592
 }
 }
+
 addon.color = {
 [ALLIANCE_DAGGERFALL_COVENANT] = ZO_ColorDef:New(0, 0.25, 1, 0.2),
 [ALLIANCE_ALDMERI_DOMINION] = ZO_ColorDef:New(1, 1, 0, 0.15),
 [ALLIANCE_EBONHEART_PACT] = ZO_ColorDef:New(1, 0, 0, 0.15)
 }
+
 addon.defaultColor = ZO_ColorDef:New(0, 0, 0, 0.25)
 addon.transparentColor = ZO_ColorDef:New(0, 0, 0, 0)
 addon.baseGameColor = ZO_ColorDef:New(0.5, 1, 0.5, 0.25)
 addon.dlcGameColor = ZO_ColorDef:New(0.25, 0.25, 0.75, 0.35)
+
 local em = GetEventManager()
 local am = GetAnimationManager()
 local lookup = {
@@ -413,6 +422,7 @@ fonts = {},
 fontSizes = {},
 colors = {}
 }
+
 function addon:ApplyOpacity()
 local opacity = self.savedVars.opacity / 100
 self.color[ALLIANCE_DAGGERFALL_COVENANT]:SetAlpha(opacity * 1.25)
@@ -423,6 +433,7 @@ self.transparentColor:SetAlpha(opacity)
 self.baseGameColor:SetAlpha(opacity)
 self.dlcGameColor:SetAlpha(opacity * 1.2)
 end
+
 function addon:ApplyColors()
 if self.savedVars.color == "BaseGame" then
 self.GetColor = self.GetBaseGameColor
@@ -435,6 +446,9 @@ self.GetColor = self.GetAllianceColor
 self.GetDefaultColor = self.AllianceDefaultColor
 end
 end
+
+
+
 local function UpdateUIVisibility(hidden)
     if not addon.savedVars.enableUI then return end
     local uiControl = WINDOW_MANAGER:GetControlByName("TraduzioneItaESOUI")
@@ -446,6 +460,8 @@ local function UpdateUIVisibility(hidden)
         end
     end
 end
+
+
 local function UpdateMapName()
     SafeCall(function()
         if not addon.savedVars.bilingualMapNames and not addon.savedVars.useEnglishNames then
@@ -472,9 +488,11 @@ local function UpdateMapName()
         end
     end)
 end
+
 function addon:InitSettings()
 local LAM = LibAddonMenu2
 if not LAM then return end
+
 local panelData = {
 type = "panel",
 name = "Traduzione Italiana ESO",
@@ -485,10 +503,12 @@ slashCommand = "/itaeso",
 registerForRefresh = true,
 registerForDefaults = true
 }
+
 -- helper per testo on/off visuale nelle descrizioni (mostrato nel tooltip o nel nome se vuoi comporre il testo)
 local function OnOffLabel(value)
     return value and "Abilitato" or "Disabilitato"
 end
+
 local optionsData = {
 {
 type = "dropdown",
@@ -585,6 +605,7 @@ type = "checkbox",
 name = "Nascondi Wayshrine su Tamriel",
 tooltip = function() return "Nasconde i pin dei wayshrine sulla mappa di Tamriel (stile Votan's). Stato: " .. OnOffLabel(self.savedVars.hidePinsOnTamriel) end,
 getFunc = function() return self.savedVars.hidePinsOnTamriel end,
+
         setFunc = function(value)
             self.savedVars.hidePinsOnTamriel = value
             SafeCall(function()
@@ -605,12 +626,17 @@ getFunc = function() return self.savedVars.hidePinsOnTamriel end,
                 end
             end)
         end,
+
+
+
 },
 {
 type = "checkbox",
 name = "Nomi Bilingui nei Tooltips (POI/Keeps/Shrines)",
 tooltip = function() return "Mostra nomi in italiano e inglese nei tooltips quando passi il mouse su POI, Keeps o Shrines. Stato: " .. OnOffLabel(self.savedVars.bilingualPOI) end,
 getFunc = function() return self.savedVars.bilingualPOI end,
+
+
         setFunc = function(value)
             self.savedVars.bilingualPOI = value
             SafeCall(function()
@@ -633,6 +659,22 @@ getFunc = function() return self.savedVars.bilingualPOI end,
                 end
             end)
         end,
+
+
+
+},
+{
+type = "checkbox",
+name = "Nome Inglese su Nuova Linea",
+tooltip = function() return "Mostra il nome inglese su una nuova linea sotto quello italiano nei tooltips e mappe. Stato: " .. OnOffLabel(self.savedVars.bilingualNewLine) end,
+getFunc = function() return self.savedVars.bilingualNewLine end,
+setFunc = function(value)
+self.savedVars.bilingualNewLine = value
+if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX then
+SafeCall(function() self:RenderMap(self.savedVars.showLocations) end)
+end
+end,
+disabled = function() return not self.savedVars.bilingualPOI and not self.savedVars.bilingualMapNames end
 },
 {
 type = "colorpicker",
@@ -701,17 +743,6 @@ setFunc = function(value)
 self.savedVars.linguaIA = value
 end
 },
--- Semplificato: Solo un checkbox
-{
-type = "checkbox",
-name = "Mostra Inglese Oggetti Inventario",
-tooltip = "Mostra nome inglese sotto italiano nei tooltip item (test con 'ciao mondo').",
-getFunc = function() return self.savedVars.showEnglishItemNames end,
-setFunc = function(value)
-self.savedVars.showEnglishItemNames = value
-end,
-default = true
-},
 {
 type = "texture",
 image = "/TraduzioneItaESO/textures/flag_it.dds",
@@ -729,8 +760,10 @@ tooltip = "Bandiera inglese per il tuo addon!",
 width = "half"
 }
 }
+
 LAM:RegisterAddonPanel(addon.name .. "Options", panelData)
 LAM:RegisterOptionControls(addon.name .. "Options", optionsData)
+
 lookup.fontNames = {}
 lookup.fontValues = {}
 lookup.nameToFont = {}
@@ -739,6 +772,7 @@ table.insert(lookup.fontNames, item.name)
 table.insert(lookup.fontValues, item.data)
 lookup.nameToFont[item.name] = item.data
 end
+
 lookup.colorNames = {}
 lookup.colorValues = {}
 lookup.nameToColor = {}
@@ -747,6 +781,7 @@ table.insert(lookup.colorNames, item.name)
 table.insert(lookup.colorValues, item.data)
 lookup.nameToColor[item.name] = item.data
 end
+
 self.savedVars = ZO_SavedVars:NewAccountWide("TraduzioneItaESO_Vars", 1, nil, {
 language = "it",
 showNotifications = true,
@@ -766,17 +801,21 @@ titleFont = "ANTIQUE_FONT",
 color = "Alliance",
 linguaIA = true
 })
+
 self:createFont()
 self:ApplyColors()
 self:ApplyOpacity()
 end
+
 function addon:createFont()
 local size, sizeCity = unpack(lookup.fontSizes[self.savedVars.titleFont] or {18, 14})
 self.titleFont = string.format("$(%s)|%i|soft-shadow-thick", self.savedVars.titleFont, size)
 self.cityFont = string.format("$(%s)|%i|soft-shadow-thick", self.savedVars.titleFont, sizeCity)
 end
+
 local MapBlobManager = ZO_ObjectPool:Subclass()
 addon.MapBlobManager = MapBlobManager
+
 local function MapOverlayControlFactory(pool, controlNamePrefix, templateName, parent)
 local overlayControl = ZO_ObjectPool_CreateNamedControl(controlNamePrefix, "VotansTamrielBlobControl", pool, parent)
 overlayControl:SetAlpha(0) -- Because it's not shown yet and we want to fade in using current values
@@ -791,20 +830,24 @@ overlayControl.label:SetMouseEnabled(false)
 overlayControl.city:SetMouseEnabled(false)
 return overlayControl
 end
+
 function MapBlobManager:New(blobContainer)
 local blobFactory = function(pool)
 return MapOverlayControlFactory(pool, "VotansTamrielMapBlob", "VotansTamrielBlobControl", blobContainer)
 end
 return ZO_ObjectPool.New(self, blobFactory, ZO_ObjectPool_DefaultResetControl)
 end
+
 local function NormalizedLabelDataToUI(x, y)
 local w, h = ZO_WorldMapContainer:GetDimensions()
 return (x or 0) * w, (y or 0) * h
 end
+
 local function NormalizedBlobDataToUI(blobWidth, blobHeight, blobXOffset, blobYOffset)
 local w, h = ZO_WorldMapContainer:GetDimensions()
 return blobWidth * w, blobHeight * h, blobXOffset * w, blobYOffset * h
 end
+
 local function ShowMapTexture(textureControl, textureName, width, height, offsetX, offsetY)
 textureControl:SetTexture(textureName)
 textureControl:SetDimensions(width, height)
@@ -813,14 +856,18 @@ textureControl:SetAlpha(1)
 textureControl:SetHidden(false)
 --textureControl:SetBlendMode(TEX_BLEND_MODE_ALPHA)
 end
+
 local textureChanged
+
 function MapBlobManager:Update(normalizedMouseX, normalizedMouseY)
 local locationName, textureFile, widthN, heightN, locXN, locYN = GetMapMouseoverInfo(normalizedMouseX, normalizedMouseY)
 local textureUIWidth, textureUIHeight, textureXOffset, textureYOffset = NormalizedBlobDataToUI(widthN, heightN, locXN, locYN)
+
 if self.m_zoom ~= ZO_WorldMap_GetPanAndZoom():GetCurrentCurvedZoom() then
 self.m_zoom = ZO_WorldMap_GetPanAndZoom():GetCurrentCurvedZoom()
 textureChanged = true
 end
+
 if textureChanged then
 if textureFile ~= "" then
 local blob = self:AcquireObject(textureFile)
@@ -833,18 +880,23 @@ end
 end
 end
 end
+
 function addon:GetAllianceColor(location)
 return self.color[location.alliance] or self.defaultColor
 end
+
 function addon:AllianceDefaultColor()
 return self.defaultColor
 end
+
 function addon:GetNoColor(location)
 return self.transparentColor
 end
+
 function addon:GetBaseGameColor(location)
 return location and (location.index < 27 or location.index == 30) and self.baseGameColor or self.dlcGameColor
 end
+
 function addon:RenderMap(isTamriel)
     local positions = self.positions
     local gps = LibGPS3
@@ -853,16 +905,17 @@ function addon:RenderMap(isTamriel)
     local hidePins = not ZO_WorldMap_IsPinGroupShown(MAP_FILTER_WAYSHRINES)
     local showCities, showLocations = self.savedVars.showCitiesNames, self.savedVars.showLocations
     local currentLang = GetCVar("language.2")
+    
     for i, pos in pairs(positions) do
         local x, y = pos:GetOffset()
         local w, h = pos:GetScale()
         x, y = x + w / 2, y + h / 2
-     
+        
         -- CORREZIONE: Rimossa la chiamata problematica a GlobalToLocal (riga ~861)
         -- if gps.GlobalToLocal then
-        -- x, y = gps:GlobalToLocal(x, y)
+        --     x, y = gps:GlobalToLocal(x, y)
         -- end
-     
+        
         if x > 0 and x < 1 and y > 0 and y < 1 then
             local location = self.locations[i]
             if location and (not location.cosmic) == isTamriel then
@@ -947,13 +1000,16 @@ function addon:RenderMap(isTamriel)
             end
         end
     end
+    
     if GetCurrentMapIndex() == TAMRIEL_MAP_INDEX and self.savedVars.hidePinsOnTamriel then
         ZO_WorldMap_GetPinManager():SetPinGroupShown(MAP_FILTER_WAYSHRINES, false)
     end
 end
+
 function addon:Hide()
 self.blobManager:ReleaseAllObjects()
 end
+
 function addon:HookPOIPins()
 local lessVisible = ZO_ColorDef:New(1, 1, 1, 0.5)
 local GetCurrentMapIndex = GetCurrentMapIndex
@@ -990,6 +1046,7 @@ end
 HookPinSize(ZO_MapPin.PIN_DATA[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE])
 HookPinSize(ZO_MapPin.PIN_DATA[MAP_PIN_TYPE_FAST_TRAVEL_WAYSHRINE_CURRENT_LOC])
 end
+
 function addon:InitializeMap()
 self:InitSettings()
 local gps = LibGPS3
@@ -1008,10 +1065,10 @@ end
 if location and location.poi then
 local _, known, localX, localY = GetFastTravelNodeInfo(location.poi)
 if known then
-local globalX, globalY = localX, localY -- fallback if no gps
+local globalX, globalY = localX, localY  -- fallback if no gps
 -- CORREZIONE: Rimossa la chiamata problematica
 -- if gps and gps.LocalToGlobal then
--- globalX, globalY = gps:LocalToGlobal(localX, localY)
+--     globalX, globalY = gps:LocalToGlobal(localX, localY)
 -- end
 location.poiGlobalX = globalX
 location.poiGlobalY = globalY
@@ -1053,10 +1110,12 @@ ZO_WorldMap_GetPinManager():AddCustomPin(self.pinType, LayoutPins, LayoutPins, s
 self.pinTypeId = _G[self.pinType]
 ZO_WorldMap_GetPinManager():SetCustomPinEnabled(self.pinTypeId, true)
 end
+
 function addon:AddFont(font, displayText, size, sizeCity)
 lookup.fonts[#lookup.fonts + 1] = {name = displayText, data = font}
 lookup.fontSizes[font] = {size or 18, sizeCity or 14}
 end
+
 addon:AddFont("", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_NONE))
 addon:AddFont("MEDIUM_FONT", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_MEDIUM))
 addon:AddFont("BOLD_FONT", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_BOLD))
@@ -1067,21 +1126,26 @@ addon:AddFont("GAMEPAD_BOLD_FONT", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_GAMEPAD_
 addon:AddFont("ANTIQUE_FONT", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_ANTIQUE))
 addon:AddFont("HANDWRITTEN_FONT", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_HANDWRITTEN), 16, 12)
 addon:AddFont("STONE_TABLET_FONT", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_STONE_TABLET), 14, 10)
+
 local function AddColor(color, displayText)
 lookup.colors[#lookup.colors + 1] = {name = displayText, data = color}
 end
+
 AddColor("Alliance", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_ALLIANCE))
 AddColor("BaseGame", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_BASE_DLC))
 AddColor("None", GetString(SI_VOTANS_TAMRIEL_MAP_FONT_NO_COLOR))
+
 local em = GetEventManager()
 em:RegisterForEvent(addon.name, EVENT_ADD_ON_LOADED, function(_, addonName)
     if addonName ~= addon.name then return end
     em:UnregisterForEvent(addon.name, EVENT_ADD_ON_LOADED)
     addon:Initialize()
 end)
+
 local function ColorizeEnglish(text)
     return ZO_ColorDef:New(addon.savedVars.bilingualColor or "FFFFFF"):Colorize(text)
 end
+
 -- Normalizza una stringa per il confronto
 local function NormalizeName(s)
   if not s then return "" end
@@ -1098,6 +1162,162 @@ local function NormalizeName(s)
   s = s:gsub("%s+", " ")
   return s
 end
+
+
+-- ItalianContraction: ritorna contrazione e articolo, es. "della","la"
+local function ItalianContraction(marker, noun)
+    if not marker then return nil, nil end
+    marker = tostring(marker):lower()
+    noun = tostring(noun or "")
+
+    if marker:sub(1,1) == "i" then marker = marker:sub(2) end
+
+    local gender = nil
+    local number = nil
+    if marker:find("f") then gender = "f" end
+    if marker:find("m") then gender = "m" end
+    if marker:find("p") then number = "p" end
+    if not number then number = "s" end
+    if not gender then gender = "m" end
+
+    local trimmed = noun:match("^%s*(.-)%s*$") or ""
+    local first = trimmed:match("^%s*([%z\1-\127\194-\244][\128-\191]*)") or trimmed:sub(1,1)
+    first = (first or ""):sub(1,1):lower()
+
+    local function isVowel(ch)
+        if not ch then return false end
+        return ch:match("^[aeiouàèéìòùáíóúäëïöü]") ~= nil
+    end
+    local function startsWithSpecialConsonant(s)
+        if not s or #s < 2 then return false end
+        local a = s:sub(1,1)
+        local b = s:sub(2,2)
+        if a == "z" then return true end
+        if a == "g" and b == "n" then return true end
+        if a == "p" and (b == "s" or b == "n") then return true end
+        if a == "s" and not isVowel(b) then return true end
+        if a == "x" or a == "y" then return true end
+        return false
+    end
+
+    local article = nil
+    if gender == "f" then
+        if number == "p" then
+            article = "le"
+        else
+            if trimmed ~= "" and isVowel(first) then article = "l'" else article = "la" end
+        end
+    else
+        if number == "p" then
+            if trimmed ~= "" and (isVowel(first) or startsWithSpecialConsonant(trimmed)) then
+                article = "gli"
+            else
+                article = "i"
+            end
+        else
+            if trimmed ~= "" then
+                if isVowel(first) then article = "l'"
+                elseif startsWithSpecialConsonant(trimmed) then article = "lo"
+                else article = "il" end
+            else
+                article = "il"
+            end
+        end
+    end
+
+    local contraction = nil
+    if article == "il" then contraction = "del"
+    elseif article == "lo" then contraction = "dello"
+    elseif article == "l'" then contraction = "dell'"
+    elseif article == "la" then contraction = "della"
+    elseif article == "i" then contraction = "dei"
+    elseif article == "le" then contraction = "delle"
+    elseif article == "gli" then contraction = "degli"
+    else contraction = "di " .. article end
+
+    return contraction, article
+end
+
+-- ProcessMarkers: trova marcatori ^i... e sostituisce " di ^i..." con la contrazione corretta
+local function ProcessMarkers(name)
+    if not name or name == "" then return name end
+
+    -- work on a copy
+    local s = tostring(name)
+
+    -- per ogni occorrenza di ^i... (anche multiple), gestiamo separatamente
+    local startPos = 1
+    while true do
+        local si, ei, marker = s:find("%^i([%a%d_%-]+)", startPos)
+        if not si then break end
+
+        local markerLower = marker:lower()
+        -- cerchiamo se prima del marcatore esiste " di " (spazio-di-spazio) - ignoriamo maiuscole
+        -- consideriamo anche casi con virgola o parentesi prima: cerchiamo l'ultima occorrenza di " di " prima di si
+        local prefix = s:sub(1, si-1)
+        local di_pos = nil
+        -- ricerca semplice da destra verso sinistra
+        local search_from = #prefix
+        while search_from > 0 do
+            local p1, p2 = prefix:lower():find("%sdi%s", search_from - 50 < 1 and 1 or search_from - 50, true)
+            -- la find con true non accetta pattern, quindi usiamo match inverso:
+            break
+        end
+        -- implementazione pratica: cerchiamo l'ultima occorrenza con pattern plain " di " (case-insensitive)
+        local last_di_start, last_di_end = nil, nil
+        local lower_prefix = prefix:lower()
+        local si_di = 1
+        while true do
+            local a, b = lower_prefix:find(" di ", si_di, true)
+            if not a then break end
+            last_di_start, last_di_end = a, b
+            si_di = b + 1
+        end
+
+        if last_di_start then
+            -- abbiamo " ... di ^i..."; prendiamo la porzione dopo il marcatore come rest
+            local rest = s:sub(ei+1)
+            -- per decidere la contrazione serviamo la parola che segue "di" o la parola principale del nome:
+            -- estraiamo il gruppo di parole dopo " di " fino al marcatore (se presenti) - fallback: prendiamo la parola successiva nel 'rest'
+            local noun_context = rest:match("^%s*([%z\1-\127\194-\244][\128-\191%w%p%-]*)") or rest:match("^%s*(%w+)") or ""
+            if noun_context == "" then
+                -- se non c'è contesto, proviamo la parola immediatamente prima di " di "
+                noun_context = prefix:sub(1, last_di_start-1):match("(%S+)%s*$") or ""
+            end
+
+            local contraction, article = ItalianContraction(markerLower, noun_context)
+            if contraction then
+                -- sostituiamo " di ^i..." con " " .. contraction .. " " e poi rest (attenzione agli apostrofi)
+                -- se contraction finisce con apostrofo (dell') e rest inizia con vocale, non aggiungiamo spazio
+                local replacement = contraction
+                local rest_trim = rest:gsub("^%s+", "")
+                if replacement:sub(-1) == "'" then
+                    -- unisci direttamente, evitando doppio apostrofo o spazio
+                    s = prefix:sub(1, last_di_start-1) .. replacement .. rest_trim
+                else
+                    s = prefix:sub(1, last_di_start-1) .. replacement .. (rest_trim ~= "" and (" " .. rest_trim) or "")
+                end
+                -- ripartiamo la scansione dopo la posizione appena modificata
+                startPos = last_di_start + #replacement + 1
+            else
+                -- fallback: rimuovo solo la 'i' dal marcatore e proseguo
+                s = s:sub(1, si) .. markerLower .. s:sub(ei+1)
+                startPos = si + #markerLower + 1
+            end
+        else
+            -- nessun " di " trovata prima del marcatore: fallback semplice -> rimuovo la 'i' (lascio ^fd)
+            s = s:sub(1, si) .. markerLower .. s:sub(ei+1)
+            startPos = si + #markerLower + 1
+        end
+    end
+
+    return s
+end
+
+
+
+
+
 local function LoadTranslationTable()
     addon.translationTable = {}
     addon.reverseTable = {}
@@ -1112,6 +1332,7 @@ local function LoadTranslationTable()
       end
     end
 end
+
 local function SetLanguage(lang)
     if lang ~= GetCVar("language.2") then
         SetCVar("IgnorePatcherLanguageSetting", 1)
@@ -1119,12 +1340,16 @@ local function SetLanguage(lang)
         ReloadUI()
     end
 end
+
 local function ShowLanguageNotification(lang)
     if not addon.savedVars.showNotifications then return end
     local texturePath = lang == "en" and "/TraduzioneItaESO/textures/flag_en.dds" or "/TraduzioneItaESO/textures/flag_it.dds"
     local message = lang == "en" and "Lingua impostata su Inglese" or "Lingua impostata su Italiano"
     ZO_Alert(UI_ALERT_CATEGORY_ALERT, nil, string.format("|t24:24:%s|t %s", texturePath, message))
 end
+
+
+
 local function UpdateNPCName()
     if not addon.savedVars.bilingualNPCNames then return end
     local currentLang = GetCVar("language.2")
@@ -1141,6 +1366,9 @@ local function UpdateNPCName()
         npcLabel:SetText(newText)
     end
 end
+
+
+
 local function RefreshUI()
     SafeCall(function()
         local uiControl = WINDOW_MANAGER:GetControlByName("TraduzioneItaESOUI")
@@ -1181,6 +1409,7 @@ local function RefreshUI()
         UpdateUIVisibility(IsReticleHidden())
     end)
 end
+
 local function HookPoiTooltips()
     local function AddBilingualName(pin)
         if not addon.savedVars.bilingualPOI then return end
@@ -1188,7 +1417,6 @@ local function HookPoiTooltips()
         local cleanedLocalized = localizedName:gsub("%^%a+", "")
         local normalized = NormalizeName(localizedName)
         local englishName = addon.translationTable[normalized] or cleanedLocalized
-        englishName = englishName:gsub("^The%s+", "")
         local locString = cleanedLocalized
         if englishName and cleanedLocalized ~= englishName then
             locString = addon.savedVars.bilingualNewLine and zo_strformat("<<1>>\n<<2>>", cleanedLocalized, ColorizeEnglish(englishName)) or zo_strformat("<<1>> / <<2>>", cleanedLocalized, ColorizeEnglish(englishName))
@@ -1206,6 +1434,7 @@ local function HookPoiTooltips()
         AddBilingualName(...)
     end
 end
+
 local function HookShrineTooltips()
     local function AddEnglishToTooltip()
         if not addon.savedVars.bilingualPOI then return end
@@ -1213,7 +1442,6 @@ local function HookShrineTooltips()
         local cleanedLocalized = localized:gsub("%^%a+", "")
         local normalized = NormalizeName(localized)
         local english = addon.translationTable[normalized] or cleanedLocalized
-        english = english:gsub("^The%s+", "")
         local text = cleanedLocalized
         if english and cleanedLocalized ~= english then
             local fmt = addon.savedVars.bilingualNewLine
@@ -1236,6 +1464,7 @@ local function HookShrineTooltips()
         AddEnglishToTooltip()
     end
 end
+
 local function HookKeepTooltips()
     local function AnchorTo(control, anchorTo)
         local isValid, point, _, relPoint, offsetX, offsetY = control:GetAnchor(0)
@@ -1250,7 +1479,6 @@ local function HookKeepTooltips()
         local cleanedKeepName = keepName:gsub("%^%a+", "")
         local normalized = NormalizeName(keepName)
         local englishKeepName = addon.translationTable[normalized] or cleanedKeepName
-        englishKeepName = englishKeepName:gsub("^The%s+", "")
         local nameLabel = self:GetNamedChild("Name")
         local displayText = cleanedKeepName
         if englishKeepName and cleanedKeepName ~= englishKeepName then
@@ -1271,18 +1499,19 @@ local function HookKeepTooltips()
         end
     end
 end
+
 local function GetBilingualText(originalText)
     if not addon.savedVars.bilingualPOI or not originalText or originalText == "" then return originalText end
-    if string.find(originalText, "|c") then return originalText end -- già bilingue/colorato
+    if string.find(originalText, "|c") then return originalText end  -- già bilingue/colorato
     local cleaned = originalText:gsub("%^%a+", "")
     local normalized = NormalizeName(originalText)
     local englishName = addon.translationTable[normalized] or cleaned
-    englishName = englishName:gsub("^The%s+", "")
     if englishName == cleaned then return originalText end
     local fmt = addon.savedVars.bilingualNewLine and "<<1>>\n<<2>>" or "<<1>> (<<2>>)"
     local newText = zo_strformat(fmt, cleaned, ColorizeEnglish(englishName))
     return newText
 end
+
 local function TryHookSetText()
     if not ZO_WorldMapMouseoverName or not ZO_WorldMapMouseoverName.SetText then
         return false
@@ -1299,6 +1528,7 @@ local function TryHookSetText()
     end
     return true
 end
+
 local updaterRegistered = false
 local function StartUpdater()
     if updaterRegistered then return end
@@ -1314,36 +1544,7 @@ local function StartUpdater()
     end
     EVENT_MANAGER:RegisterForUpdate(addon.name .. "_Updater", 100, CheckMouseover)
 end
--- NUOVA FUNZIONE HOOK PER TEST: Aggiunge "ciao mondo" al tooltip item
-local function AddTestLineToTooltip(tooltip, bagId, slotIndex, itemLink)
-    if not addon.savedVars.showEnglishItemNames then return end
-    local itemName
-    if itemLink then
-        itemName = GetItemLinkName(itemLink)
-    elseif bagId and slotIndex then
-        itemName = GetItemName(bagId, slotIndex)
-    else
-        return
-    end
-    local cleanedItemName = itemName:gsub("%^%a+", "")
-    for itZone, enZone in pairs(addon.ZoneTranslations or {}) do
-        local cleanedItZone = itZone:gsub("%^%a+", "")
-        if string.match(cleanedItemName, cleanedItZone .. "$") then
-            local enItemName = cleanedItemName:gsub(cleanedItZone .. "$", enZone)
-            tooltip:AddLine("", "", 1, 1, 1, CENTER, MODIFY_TEXT_TYPE_NONE, TEXT_ALIGN_CENTER, true) -- Spacing
-            tooltip:AddLine(ColorizeEnglish(enItemName), "", 1, 1, 1, CENTER, MODIFY_TEXT_TYPE_NONE, TEXT_ALIGN_CENTER, true)
-            return
-        end
-    end
-    -- Se non trovato, non aggiungere nulla
-end
--- Hook per inventario (bag) e link
-ZO_PostHook(ItemTooltip, "SetBagItem", function(self, bagId, slotIndex)
-    AddTestLineToTooltip(self, bagId, slotIndex, nil)
-end)
-ZO_PostHook(ItemTooltip, "SetLink", function(self, itemLink)
-    AddTestLineToTooltip(self, nil, nil, itemLink)
-end)
+
 function addon:Initialize()
     -- SavedVars, defaults compreso bilingualPOI = true
     self.savedVars = ZO_SavedVars:NewAccountWide("TraduzioneItaESO_Vars", 1, nil, {
@@ -1365,11 +1566,12 @@ function addon:Initialize()
         color = "Alliance",
         offsetX = 0,
         offsetY = 0,
-        linguaIA = true,
-        showEnglishItemNames = true -- Default true per test
+        linguaIA = true
     })
+    
     -- popolo addon.translationTable
     LoadTranslationTable()
+    
     -- Nuova logica per caricamento alternativo
     local currentLang = GetCVar("language.2")
     if currentLang == "it" and self.savedVars.linguaIA then
@@ -1379,16 +1581,20 @@ function addon:Initialize()
             dofile([[AddOns\TraduzioneItaESO\esoui\lang\ir_pregame.str]])
         end)
     end
+    
     -- aggancio i tooltips degli altari
     if self.savedVars.bilingualPOI then
         HookShrineTooltips()
         HookPoiTooltips()
         HookKeepTooltips()
     end
+    
     RefreshUI()
+    
     EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_RETICLE_HIDDEN_UPDATE, function(eventCode, hidden)
         UpdateUIVisibility(hidden)
     end)
+    
     if self.savedVars.bilingualMapNames or self.savedVars.useEnglishNames then
         EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_ZONE_UPDATE, SafeEventHandler)
         EVENT_MANAGER:RegisterForEvent(addon.name, EVENT_MAP_CHUNK_INFO_RECEIVED, SafeEventHandler)
@@ -1398,25 +1604,28 @@ function addon:Initialize()
         ZO_PreHook(ZO_WorldMap, "OnHidden", function()
             SafeCall(function() addon:Hide() end)
         end)
-    
+        
         addon.lastZoom = ZO_WorldMap_GetPanAndZoom():GetCurrentCurvedZoom()
         EVENT_MANAGER:RegisterForUpdate(addon.name .. "_MapUpdate", 50, function()
             if ZO_WorldMap:IsHidden() then return end
             if GetCurrentMapIndex() ~= TAMRIEL_MAP_INDEX then return end
-        
+            
             local currentZoom = ZO_WorldMap_GetPanAndZoom():GetCurrentCurvedZoom()
             if math.abs(currentZoom - addon.lastZoom) > 0.001 then
                 addon.lastZoom = currentZoom
-                SafeCall(function()
-                    addon:RenderMap(addon.savedVars.showLocations)
+                SafeCall(function() 
+                    addon:RenderMap(addon.savedVars.showLocations) 
                 end)
             end
         end)
     end
+    
     -- aggiorno il nome mappa al login/reload
     EVENT_MANAGER:RegisterForEvent(self.name, EVENT_PLAYER_ACTIVATED, SafeEventHandler)
     SafeCall(UpdateMapName)
+    
     addon:InitializeMap()
+    
     -- Integrazione logica mouseover funzionante
     local hooked = TryHookSetText()
     if not hooked then
@@ -1428,26 +1637,31 @@ function addon:Initialize()
         end, 1000)
     end
 end
+
 -- Slash commands
 SLASH_COMMANDS["/itaesoit"] = function()
     addon.savedVars.language = "it"
     ShowLanguageNotification("it")
     SetLanguage("it")
 end
+
 SLASH_COMMANDS["/itaesoen"] = function()
     addon.savedVars.language = "en"
     ShowLanguageNotification("en")
     SetLanguage("en")
 end
+
 SLASH_COMMANDS["/itaeso"] = function()
     if LibAddonMenu2 then
         LibAddonMenu2:OpenToPanel(addon.name .. "Options")
     end
 end
+
 SLASH_COMMANDS["/testitaeso"] = function()
     SafeCall(UpdateMapName)
     SafeCall(function() addon:RenderMap(addon.savedVars.showLocations) end)
 end
+
 SLASH_COMMANDS["/testtable"] = function()
   local count = 0
   for _ in pairs(addon.translationTable or {}) do
