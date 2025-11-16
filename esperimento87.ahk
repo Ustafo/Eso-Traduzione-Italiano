@@ -3692,6 +3692,7 @@ RemoveCsvHeader(ByRef arr)
 
 ; … (definizione del tray menu, variabili globali, ecc.) …
 
+
 preparafile:
 ;————————————————————————————
 ; FASE 1/5 – Selezione file
@@ -3711,6 +3712,7 @@ IniRead, fileTrad, %configFile%, Percorsi, fileTraduzioni, NOT_FOUND
 if (fileTrad = "NOT_FOUND" || !FileExist(fileTrad)) {
     FileSelectFile, fileTrad, 3,, Seleziona il file delle traduzioni (italiano)
     if (!fileTrad) {
+        Tooltip
         Tooltip
         return
     }
@@ -3754,7 +3756,7 @@ dataSpanish := caricafileinarraymulticolonna(fileSpanish, totalSp, 0)
 Tooltip, Lettura spagnolo completata (%totalSp% righe), 0, 0
 Sleep, 500
 
-; Crea mappe per accesso rapido
+; mappe
 engMap := {}, frMap := {}, spMap := {}, markerMap := {}
 markerMap["m"] := "m"
 markerMap["md"] := "md"
@@ -3776,58 +3778,48 @@ for i, row in dataOld {
 }
 Tooltip, Mappa inglese completata, 0, 0
 Sleep, 500
-
-Tooltip, Creazione mappa francese..., 0, 0
 for i, row in dataFrench {
     key := row[1] . "" . row[2] . "" . row[3]
     frMap[key] := row[5]
-    if (Mod(i, 20000) = 0)
-        Tooltip, Mappa francese: %i% / %totalFr%, 0, 0
 }
-Tooltip, Mappa francese completata, 0, 0
-Sleep, 500
-
-Tooltip, Creazione mappa spagnola..., 0, 0
 for i, row in dataSpanish {
     key := row[1] . "" . row[2] . "" . row[3]
     spMap[key] := row[5]
-    if (Mod(i, 20000) = 0)
-        Tooltip, Mappa spagnola: %i% / %totalSp%, 0, 0
 }
-Tooltip, Mappa spagnola completata, 0, 0
-Sleep, 500
 
 ; ===============================================
-; GENERAZIONE FILE LUA CON MARCATORI PERFETTI
+; GENERAZIONE FILE LUA – MARCATORI PERFETTI
 ; ===============================================
 zoneTranslations := {}, npcTranslations := {}, zoneCount := 0, npcCount := 0
 
 Tooltip, Estrazione località e NPC da inglese..., 0, 0
+
 for i, row in dataOld {
     if (row[1] = 4330293 || row[1] = 10860933 || row[1] = 162658389 || row[1] = 28666901 || row[1] = 49656629 || row[1] = 121975845) {
         trimmed2 := RegExReplace(row[2], "^\s+|\s+$", "")
         trimmed3 := RegExReplace(row[3], "^\s+|\s+$", "")
-        key := row[1] . "" . Format("{:d}{:d}", (trimmed2 = "" ? 0 : trimmed2), trimmed3)
+        key := row[1] . Format("{:d}{:d}", (trimmed2 = "" ? 0 : trimmed2), (trimmed3 = "" ? 0 : trimmed3))
         zoneTranslations[key] := { "en": row[5] }
     } else if (row[1] = 8290981) {
         trimmed2 := RegExReplace(row[2], "^\s+|\s+$", "")
         trimmed3 := RegExReplace(row[3], "^\s+|\s+$", "")
-        key := row[1] . "" . Format("{:d}{:d}", (trimmed2 = "" ? 0 : trimmed2), trimmed3)
+        key := row[1] . Format("{:d}{:d}", (trimmed2 = "" ? 0 : trimmed2), (trimmed3 = "" ? 0 : trimmed3))
         npcTranslations[key] := { "en": row[5] }
     }
 }
 
-Tooltip, Aggiunta traduzioni italiane Lua (marcatori corretti)... , 0, 0
+Tooltip, Estrazione inglese completata, 0, 0
+Sleep, 500
+
+Tooltip, Aggiunta traduzioni italiane Lua (marcatori corretti)..., 0, 0
 for i, row in dataNew {
     if (row[1] = 4330293 || row[1] = 10860933 || row[1] = 162658389 || row[1] = 28666901 || row[1] = 49656629 || row[1] = 121975845 || row[1] = 8290981) {
-        trimmed2 := RegExReplace(row[2], "^\s+|\s+$", "")
-        trimmed3 := RegExReplace(row[3], "^\s+|\s+$", "")
-        key := row[1] . "" . Format("{:d}{:d}", (trimmed2 = "" ? 0 : trimmed2), trimmed3)
+        key := row[1] . "" . Format("{:d}{:d}", RegExReplace(row[2],"^\s+|\s+$",""), RegExReplace(row[3],"^\s+|\s+$",""))
         itRaw := row[5]
         frRaw := frMap.HasKey(key) ? frMap[key] : ""
         spRaw := spMap.HasKey(key) ? spMap[key] : ""
 
-        ; === LOGICA MARCATORI VECCHIA PERFETTA ===
+        ; LOGICA MARCATORI IDENTICA ALLA VERSIONE VECCHIA CHE FUNZIONAVA
         itNormalized := NormalizeMarkerInString(itRaw)
         currentItMarker := ExtractMarkerFromString(itNormalized)
         hasItMarker := (currentItMarker != "")
@@ -3853,8 +3845,8 @@ for i, row in dataNew {
             newMarker := wordGender
 
         if (newMarker != "" && (newMarker != currentItMarker || aggiungii = 1)) {
-            finalMarker := (aggiungii = 1) ? "i" . newMarker : newMarker
-            itNormalized := itStrip . " ^" . finalMarker
+            finalMarker := (aggiungii = 1) ? "^i" . newMarker : "^" . newMarker
+            itNormalized := itStrip . " " . finalMarker
 
             if (aggiungii = 1) {
                 itNormalized := StrReplace(itNormalized, " ^f", " ^if")
@@ -3881,11 +3873,9 @@ for i, row in dataNew {
             npcCount++
         }
     }
-    if (Mod(i, 20000) = 0)
-        Tooltip, Lua: %i% / %totalNew%, 0, 0
 }
 
-; Elimina doppioni zone + genera file Lua (identico al tuo originale)
+; generazione zone_it.lua e npc_it.lua (identica alla tua)
 uniqueZoneTranslations := {}
 for key, data in zoneTranslations {
     if (data.HasKey("it") && data.HasKey("en") && data.it != data.en)
@@ -3928,15 +3918,12 @@ outputNPCLua .= " }`n}`n"
 FileDelete, %A_ScriptDir%\npc_it.lua
 FileAppend, %outputNPCLua%, %A_ScriptDir%\npc_it.lua, UTF-8
 
-debugLog := A_ScriptDir . "\debug_lua.txt"
-FileDelete, %debugLog%
-FileAppend, Contenuto di zone_it.lua:`n%outputZoneLua%`n`nContenuto di npc_it.lua:`n%outputNPCLua%, %debugLog%, UTF-8
-MsgBox, 64, File Lua Generati, Generati %zoneCount% zone e %npcCount% NPC.`nControlla debug_lua.txt se vuoi., 4
-
-
-
-Tooltip, Completata Fase 2/5: Lettura e caricamento, 0, 0
+MsgBox, 64, File Lua Generati, Generati %zoneCount% zone e %npcCount% NPC nei file zone_it.lua e npc_it.lua
+Tooltip, Completata Fase 2/5, 0, 0
 Sleep, 500
+
+
+
 ;————————————————————————————
 ; FASE 3/5 – Lettura opzione preparatestopergioco
 ;————————————————————————————
